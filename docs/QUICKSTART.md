@@ -65,3 +65,21 @@ Examples:
 - `[["graph"], ["neural"], ["networks"]]` -> `graph AND neural AND networks`
 - `[["graph", "neural"], ["routing", "congestion"]]` -> `(graph OR neural) AND (routing OR congestion)`
 - `[["sigcomm"], ["2024"]]` -> `sigcomm AND year=2024`
+
+
+Accepted `term_groups` shape:
+- `term_groups` must be a **list of string lists only**
+
+Valid examples:
+- `[["Florian Brandherm"]]`
+- `[["graph"], ["neural"], ["networks"]]`
+- `[["graph", "neural"], ["networks"]]`
+
+Meaning:
+- each inner list is an **OR** group
+- the outer list combines those groups with **AND**
+
+Invalid example:
+- `[{"operator": "AND", "terms": ["Florian Brandherm"]}]`
+
+The MCP tool does **not** accept object-based term-group syntax.

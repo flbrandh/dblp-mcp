@@ -461,7 +461,9 @@ def test_search_publications_rejects_sql_injection_like_terms(tmp_path: Path) ->
     assert status["publications"] == 2
 
 
-def test_get_publication_treats_sql_injection_like_key_as_literal(tmp_path: Path) -> None:
+def test_get_publication_treats_sql_injection_like_key_as_literal(
+    tmp_path: Path,
+) -> None:
     xml_path = tmp_path / "dblp.xml"
     database_path = tmp_path / "dblp.sqlite"
     xml_path.write_text(SAMPLE_XML, encoding="utf-8")

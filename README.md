@@ -356,3 +356,21 @@ Additional controls:
 - batch tools enforce configurable limits for abstract and fulltext requests
 
 - `DBLP_MCP_PROVIDER_DELAY_MIN_SECONDS` / `DBLP_MCP_PROVIDER_DELAY_MAX_SECONDS` add a small randomized default delay before provider requests; provider-specific overrides use names like `DBLP_MCP_PROVIDER_DELAY_OPENALEX_MIN_SECONDS` and `DBLP_MCP_PROVIDER_DELAY_IEEE_PDF_MAX_SECONDS`
+
+
+Accepted `term_groups` shape:
+- `term_groups` must be a **list of string lists only**
+
+Valid examples:
+- `[["Florian Brandherm"]]`
+- `[["graph"], ["neural"], ["networks"]]`
+- `[["graph", "neural"], ["networks"]]`
+
+Meaning:
+- each inner list is an **OR** group
+- the outer list combines those groups with **AND**
+
+Invalid example:
+- `[{"operator": "AND", "terms": ["Florian Brandherm"]}]`
+
+The MCP tool does **not** accept object-based term-group syntax.
