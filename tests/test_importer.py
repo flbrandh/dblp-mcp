@@ -129,14 +129,18 @@ def test_download_requires_https(tmp_path: Path) -> None:
         )
 
 
-def test_download_uses_cached_file_when_destination_exists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_download_uses_cached_file_when_destination_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     destination = DEFAULT_DATA_DIR / "test-download-cache" / "dblp.xml.gz"
     destination.parent.mkdir(parents=True, exist_ok=True)
     payload = b"cached dblp dump"
     destination.write_bytes(payload)
 
     def fail_urlopen(*args, **kwargs):
-        raise AssertionError("urlopen should not be called when the dump already exists")
+        raise AssertionError(
+            "urlopen should not be called when the dump already exists"
+        )
 
     monkeypatch.setattr("dblp_mcp.downloader.urlopen", fail_urlopen)
 
@@ -189,7 +193,9 @@ def test_import_file_ignores_duplicate_identifiers(tmp_path: Path) -> None:
     publication = get_publication(database_path, "journals/test/Duplicate2024")
     assert result["stats"]["identifiers"] == 1
     assert publication is not None
-    assert publication["identifiers"] == [{"kind": "ee", "value": "https://doi.org/10.1000/example"}]
+    assert publication["identifiers"] == [
+        {"kind": "ee", "value": "https://doi.org/10.1000/example"}
+    ]
 
 
 def test_get_database_status_reports_imported_content(tmp_path: Path) -> None:
@@ -310,10 +316,15 @@ def test_search_publications_combines_structured_filters(tmp_path: Path) -> None
     assert result["results"][0]["dblp_key"] == "conf/test/Builder2023"
 
 
-def test_download_respects_disabled_network_setting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    destination = DEFAULT_DATA_DIR / 'test-download-disabled' / 'dblp.xml.gz'
+def test_download_respects_disabled_network_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = DEFAULT_DATA_DIR / "test-download-disabled" / "dblp.xml.gz"
     destination.parent.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr('dblp_mcp.downloader.ensure_network_enabled', lambda: (_ for _ in ()).throw(RuntimeError('network disabled')))
+    monkeypatch.setattr(
+        "dblp_mcp.downloader.ensure_network_enabled",
+        lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
+    )
 
-    with pytest.raises(RuntimeError, match='network disabled'):
+    with pytest.raises(RuntimeError, match="network disabled"):
         download_dblp_dump(destination=destination, replace=True)

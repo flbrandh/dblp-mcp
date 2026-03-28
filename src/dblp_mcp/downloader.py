@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
-import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from .config import DEFAULT_SOURCE_URL, DOWNLOAD_TIMEOUT_SECONDS, ensure_network_enabled, resolve_data_path
+from .config import (
+    DEFAULT_SOURCE_URL,
+    DOWNLOAD_TIMEOUT_SECONDS,
+    ensure_network_enabled,
+    resolve_data_path,
+)
 
 
 def _hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -63,7 +68,7 @@ def download_dblp_dump(
             destination=destination_path,
             size_bytes=destination_path.stat().st_size,
             sha256=digest_hex,
-            downloaded_at=datetime.now(timezone.utc).isoformat(),
+            downloaded_at=datetime.now(UTC).isoformat(),
             cached=True,
         )
 
@@ -72,7 +77,10 @@ def download_dblp_dump(
     size_bytes = 0
 
     try:
-        with urlopen(source_url, timeout=timeout_seconds) as response, temp_path.open("wb") as handle:
+        with (
+            urlopen(source_url, timeout=timeout_seconds) as response,
+            temp_path.open("wb") as handle,
+        ):
             while True:
                 chunk = response.read(chunk_size)
                 if not chunk:
@@ -88,7 +96,9 @@ def download_dblp_dump(
         raise RuntimeError(f"DBLP download failed: {exc.reason}") from exc
     except OSError as exc:
         temp_path.unlink(missing_ok=True)
-        raise RuntimeError(f"Unable to store DBLP dump at {destination_path}: {exc}") from exc
+        raise RuntimeError(
+            f"Unable to store DBLP dump at {destination_path}: {exc}"
+        ) from exc
 
     temp_path.replace(destination_path)
     return DownloadResult(
@@ -96,6 +106,6 @@ def download_dblp_dump(
         destination=destination_path,
         size_bytes=size_bytes,
         sha256=digest_state.hexdigest(),
-        downloaded_at=datetime.now(timezone.utc).isoformat(),
+        downloaded_at=datetime.now(UTC).isoformat(),
         cached=False,
     )

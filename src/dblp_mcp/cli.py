@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from dataclasses import asdict
-from typing import Sequence
 
 from .config import DEFAULT_DATABASE_PATH, DEFAULT_XML_PATH
 from .downloader import download_dblp_dump
@@ -20,7 +20,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     download_parser = subparsers.add_parser("download", help="download the DBLP dump")
     download_parser.add_argument("--destination", default=str(DEFAULT_XML_PATH))
-    download_parser.add_argument("--source-url", default="https://dblp.org/xml/dblp.xml.gz")
+    download_parser.add_argument(
+        "--source-url", default="https://dblp.org/xml/dblp.xml.gz"
+    )
     download_parser.add_argument("--replace", action="store_true")
 
     import_parser = subparsers.add_parser("import", help="build the SQLite database")

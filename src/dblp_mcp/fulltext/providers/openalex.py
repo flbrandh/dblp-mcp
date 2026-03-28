@@ -10,7 +10,7 @@ from ...config import FULLTEXT_TIMEOUT_SECONDS, ensure_network_enabled
 from ..base import FulltextCandidate, FulltextLookup
 
 OPENALEX_WORKS_URL = "https://api.openalex.org/works/https://doi.org/{doi}"
-USER_AGENT = "dblp-mcp/0.1 (transparent lawful fulltext fetcher; contact repository owner)"
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"
 _DISALLOWED_HOST_FRAGMENTS = ("author",)
 
 

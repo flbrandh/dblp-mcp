@@ -11,7 +11,7 @@ from ...text import normalize_for_search, normalize_text
 from ..base import AbstractFetchResult, AbstractLookup
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query?id_list={arxiv_id}"
-USER_AGENT = "dblp-mcp/0.1 (transparent abstract fetcher; contact repository owner)"
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"
 ATOM_NAMESPACE = {"atom": "http://www.w3.org/2005/Atom"}
 
 

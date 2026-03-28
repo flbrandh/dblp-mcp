@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
-
 DBLP_RECORD_TYPES = {
     "article",
     "inproceedings",

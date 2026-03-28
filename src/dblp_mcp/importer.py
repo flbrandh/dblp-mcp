@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import os
+import sqlite3
+from datetime import UTC, datetime
 from gzip import open as gzip_open
 from html import unescape
 from pathlib import Path
 from re import compile as re_compile
-import os
-import sqlite3
-from typing import BinaryIO, Iterable, cast
+from typing import BinaryIO, cast
 from xml.etree.ElementTree import Element, XMLParser
 
 from defusedxml.ElementTree import iterparse
@@ -27,7 +27,6 @@ from .models import (
     VenueLink,
 )
 from .text import inner_text, normalize_for_search
-
 
 DBLP_DTD_URL = "https://dblp.org/xml/dblp.dtd"
 _ENTITY_RE = re_compile(r'<!ENTITY\s+(\w+)\s+"([^"]*)"\s*>')
@@ -101,7 +100,9 @@ def _build_record(element: Element) -> PublicationRecord:
             continue
         if tag in VENUE_FIELDS:
             position = venue_positions.get(tag, 0)
-            record.venues.append(VenueLink(name=text, venue_type=tag, position=position))
+            record.venues.append(
+                VenueLink(name=text, venue_type=tag, position=position)
+            )
             venue_positions[tag] = position + 1
             continue
         if tag in IDENTIFIER_FIELDS:
@@ -125,8 +126,9 @@ def _build_record(element: Element) -> PublicationRecord:
 
 class ImportStats(dict[str, int]):
     """Small typed counter map tracking importer output sizes."""
+
     @classmethod
-    def create(cls) -> "ImportStats":
+    def create(cls) -> ImportStats:
         return cls(
             publications=0,
             contributors=0,
@@ -139,7 +141,9 @@ class ImportStats(dict[str, int]):
 
 
 class DblpImporter:
-    def __init__(self, database_path: str | os.PathLike[str], batch_size: int = 500) -> None:
+    def __init__(
+        self, database_path: str | os.PathLike[str], batch_size: int = 500
+    ) -> None:
         """Create a streaming importer targeting one SQLite file."""
         if batch_size < 1:
             raise ValueError("batch_size must be at least 1")
@@ -162,7 +166,9 @@ class DblpImporter:
             raise ValueError(
                 "incremental append imports are not supported; use replace=True or a new database path"
             )
-        temp_database = self.database_path.with_suffix(self.database_path.suffix + ".tmp")
+        temp_database = self.database_path.with_suffix(
+            self.database_path.suffix + ".tmp"
+        )
         if replace and temp_database.exists():
             temp_database.unlink()
 
@@ -206,10 +212,14 @@ class DblpImporter:
                         root.clear()
 
             rebuild_search_index(connection)
-            self._finish_import_run(connection, import_run_id, "completed", stats["publications"])
+            self._finish_import_run(
+                connection, import_run_id, "completed", stats["publications"]
+            )
             connection.commit()
         except Exception as exc:
-            self._finish_import_run(connection, import_run_id, "failed", stats["publications"], str(exc))
+            self._finish_import_run(
+                connection, import_run_id, "failed", stats["publications"], str(exc)
+            )
             connection.commit()
             connection.close()
             if replace and temp_database.exists():
@@ -227,7 +237,9 @@ class DblpImporter:
             "stats": dict(stats),
         }
 
-    def _start_import_run(self, connection: sqlite3.Connection, source_path: Path) -> int:
+    def _start_import_run(
+        self, connection: sqlite3.Connection, source_path: Path
+    ) -> int:
         """Create an ``import_runs`` row marking the start of an import."""
         cursor = connection.execute(
             """
@@ -236,7 +248,7 @@ class DblpImporter:
             """,
             (
                 str(source_path),
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 source_path.stat().st_size,
             ),
         )
@@ -261,7 +273,7 @@ class DblpImporter:
             WHERE id = ?
             """,
             (
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 status,
                 records_processed,
                 error_message,
@@ -330,7 +342,12 @@ class DblpImporter:
                 INSERT INTO publication_contributors(publication_id, contributor_id, role, position)
                 VALUES (?, ?, ?, ?)
                 """,
-                (publication_id, contributor_id, contributor.role, contributor.position),
+                (
+                    publication_id,
+                    contributor_id,
+                    contributor.role,
+                    contributor.position,
+                ),
             )
             if inserted:
                 stats["contributors"] += 1

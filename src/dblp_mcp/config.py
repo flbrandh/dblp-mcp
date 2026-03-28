@@ -2,22 +2,32 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
-
+from pathlib import Path
 
 DEFAULT_SOURCE_URL = "https://dblp.org/xml/dblp.xml.gz"
 _DBLP_MCP_DATA_DIR = os.getenv("DBLP_MCP_DATA_DIR")
-DEFAULT_DATA_DIR = Path(_DBLP_MCP_DATA_DIR).expanduser().resolve() if _DBLP_MCP_DATA_DIR else (Path.cwd() / "data").resolve()
+DEFAULT_DATA_DIR = (
+    Path(_DBLP_MCP_DATA_DIR).expanduser().resolve()
+    if _DBLP_MCP_DATA_DIR
+    else (Path.cwd() / "data").resolve()
+)
 DEFAULT_XML_PATH = DEFAULT_DATA_DIR / "dblp.xml.gz"
 DEFAULT_DATABASE_PATH = DEFAULT_DATA_DIR / "dblp.sqlite"
 DEFAULT_BATCH_SIZE = int(os.getenv("DBLP_MCP_BATCH_SIZE", "500"))
 DEFAULT_FULLTEXT_DIR = DEFAULT_DATA_DIR / "fulltext"
-NETWORK_ENABLED = os.getenv("DBLP_MCP_ENABLE_NETWORK", "1").strip().casefold() not in {"0", "false", "no", "off"}
+NETWORK_ENABLED = os.getenv("DBLP_MCP_ENABLE_NETWORK", "1").strip().casefold() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 ABSTRACT_TIMEOUT_SECONDS = int(os.getenv("DBLP_MCP_ABSTRACT_TIMEOUT_SECONDS", "30"))
 FULLTEXT_TIMEOUT_SECONDS = int(os.getenv("DBLP_MCP_FULLTEXT_TIMEOUT_SECONDS", "60"))
 DOWNLOAD_TIMEOUT_SECONDS = int(os.getenv("DBLP_MCP_DOWNLOAD_TIMEOUT_SECONDS", "60"))
-MAX_FULLTEXT_PDF_BYTES = int(os.getenv("DBLP_MCP_MAX_FULLTEXT_PDF_BYTES", str(25 * 1024 * 1024)))
+MAX_FULLTEXT_PDF_BYTES = int(
+    os.getenv("DBLP_MCP_MAX_FULLTEXT_PDF_BYTES", str(25 * 1024 * 1024))
+)
 
 
 def data_dir_was_explicitly_configured() -> bool:
@@ -28,7 +38,9 @@ def data_dir_was_explicitly_configured() -> bool:
 def ensure_network_enabled() -> None:
     """Fail fast when network-backed enrichment has been disabled by config."""
     if not NETWORK_ENABLED:
-        raise RuntimeError("network-backed enrichment is disabled by DBLP_MCP_ENABLE_NETWORK")
+        raise RuntimeError(
+            "network-backed enrichment is disabled by DBLP_MCP_ENABLE_NETWORK"
+        )
 
 
 def resolve_data_path(path: str | os.PathLike[str]) -> Path:

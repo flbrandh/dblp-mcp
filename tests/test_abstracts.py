@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from dblp_mcp.abstracts.service import fetch_publication_abstract, fetch_publication_abstracts
+from dblp_mcp.abstracts.service import (
+    fetch_publication_abstract,
+    fetch_publication_abstracts,
+)
 from dblp_mcp.database import connect
 from dblp_mcp.importer import DblpImporter
 from dblp_mcp.search import get_database_status, get_publication
@@ -44,7 +47,7 @@ class FakeResponse:
     def read(self) -> bytes:
         return self._payload
 
-    def __enter__(self) -> "FakeResponse":
+    def __enter__(self) -> FakeResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -57,7 +60,7 @@ def database_path(tmp_path: Path) -> Path:
     dtd_path = tmp_path / "dblp.dtd"
     database_path = tmp_path / "dblp.sqlite"
     xml_path.write_text(SAMPLE_XML, encoding="utf-8")
-    dtd_path.write_text("<!ENTITY uuml \"&#252;\">\n", encoding="latin-1")
+    dtd_path.write_text('<!ENTITY uuml "&#252;">\n', encoding="latin-1")
     DblpImporter(database_path).import_file(xml_path)
     return database_path
 
@@ -98,8 +101,7 @@ def test_fetch_publication_abstract_stores_arxiv_abstract(
 ) -> None:
     def fake_urlopen(request, timeout=30):
         assert request.full_url.endswith("2401.12345")
-        return FakeResponse(
-            b"""<?xml version='1.0' encoding='UTF-8'?>
+        return FakeResponse(b"""<?xml version='1.0' encoding='UTF-8'?>
 <feed xmlns='http://www.w3.org/2005/Atom'>
   <entry>
     <summary>
@@ -107,8 +109,7 @@ def test_fetch_publication_abstract_stores_arxiv_abstract(
     </summary>
   </entry>
 </feed>
-"""
-        )
+""")
 
     monkeypatch.setattr("dblp_mcp.abstracts.providers.arxiv.urlopen", fake_urlopen)
 
@@ -137,7 +138,9 @@ def test_fetch_publication_abstract_uses_cached_abstract(
         ),
     )
 
-    first_result = fetch_publication_abstract(database_path, "journals/test/OpenAlex2024")
+    first_result = fetch_publication_abstract(
+        database_path, "journals/test/OpenAlex2024"
+    )
     assert first_result["status"] == "fetched"
 
     def fail_urlopen(request, timeout=30):
@@ -145,13 +148,17 @@ def test_fetch_publication_abstract_uses_cached_abstract(
 
     monkeypatch.setattr("dblp_mcp.abstracts.providers.openalex.urlopen", fail_urlopen)
 
-    second_result = fetch_publication_abstract(database_path, "journals/test/OpenAlex2024")
+    second_result = fetch_publication_abstract(
+        database_path, "journals/test/OpenAlex2024"
+    )
 
     assert second_result["status"] == "cached"
     assert second_result["abstract"]["text"] == "Cached abstract"
 
 
-def test_fetch_publication_abstract_logs_unsupported_sources(database_path: Path) -> None:
+def test_fetch_publication_abstract_logs_unsupported_sources(
+    database_path: Path,
+) -> None:
     result = fetch_publication_abstract(database_path, "conf/test/Unsupported2024")
 
     assert result == {
@@ -175,7 +182,9 @@ def test_fetch_publication_abstract_logs_unsupported_sources(database_path: Path
     assert row["error_code"] == "unsupported_source"
 
 
-def test_fetch_publication_abstract_raises_for_missing_publication(database_path: Path) -> None:
+def test_fetch_publication_abstract_raises_for_missing_publication(
+    database_path: Path,
+) -> None:
     with pytest.raises(LookupError, match="publication not found"):
         fetch_publication_abstract(database_path, "missing/key")
 
@@ -213,22 +222,22 @@ def test_fetch_publication_abstracts_returns_mixed_results(
 ) -> None:
     def fake_openalex(request, timeout=30):
         return FakeResponse(
-            json.dumps({
-                "abstract_inverted_index": {
-                    "Bulk": [0],
-                    "OpenAlex": [1],
+            json.dumps(
+                {
+                    "abstract_inverted_index": {
+                        "Bulk": [0],
+                        "OpenAlex": [1],
+                    }
                 }
-            }).encode("utf-8")
+            ).encode("utf-8")
         )
 
     def fake_arxiv(request, timeout=30):
-        return FakeResponse(
-            b"""<?xml version='1.0' encoding='UTF-8'?>
+        return FakeResponse(b"""<?xml version='1.0' encoding='UTF-8'?>
 <feed xmlns='http://www.w3.org/2005/Atom'>
   <entry><summary>Bulk ArXiv</summary></entry>
 </feed>
-"""
-        )
+""")
 
     monkeypatch.setattr("dblp_mcp.abstracts.providers.openalex.urlopen", fake_openalex)
     monkeypatch.setattr("dblp_mcp.abstracts.providers.arxiv.urlopen", fake_arxiv)
@@ -265,14 +274,18 @@ def test_fetch_publication_abstracts_rejects_empty_lists(database_path: Path) ->
         fetch_publication_abstracts(database_path, [])
 
 
-def test_fetch_publication_abstract_handles_network_disabled(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_publication_abstract_handles_network_disabled(
+    database_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         "dblp_mcp.abstracts.providers.openalex.ensure_network_enabled",
         lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
     )
     monkeypatch.setattr(
         "dblp_mcp.abstracts.providers.openalex.urlopen",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("urlopen should not be called")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("urlopen should not be called")
+        ),
     )
 
     result = fetch_publication_abstract(database_path, "journals/test/OpenAlex2024")
@@ -280,7 +293,9 @@ def test_fetch_publication_abstract_handles_network_disabled(database_path: Path
     assert result["status"] == "not_found"
 
 
-def test_fetch_publication_abstracts_classifies_provider_errors(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_publication_abstracts_classifies_provider_errors(
+    database_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         "dblp_mcp.abstracts.providers.openalex.ensure_network_enabled",
         lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),

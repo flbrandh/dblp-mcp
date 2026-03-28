@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 from typing import TypedDict, cast
 
 from .database import connect, ensure_abstract_schema, ensure_fulltext_schema
@@ -51,7 +51,9 @@ def get_recent_fetch_failures(
         connection.close()
 
 
-def _abstract_failures(connection: sqlite3.Connection, limit: int) -> list[FailureEntry]:
+def _abstract_failures(
+    connection: sqlite3.Connection, limit: int
+) -> list[FailureEntry]:
     """Load recent abstract-provider failures from SQLite."""
     rows = connection.execute(
         """
@@ -66,7 +68,9 @@ def _abstract_failures(connection: sqlite3.Connection, limit: int) -> list[Failu
     return [cast(FailureEntry, dict(row) | {"category": "abstract"}) for row in rows]
 
 
-def _fulltext_failures(connection: sqlite3.Connection, limit: int) -> list[FailureEntry]:
+def _fulltext_failures(
+    connection: sqlite3.Connection, limit: int
+) -> list[FailureEntry]:
     """Load recent fulltext-provider failures from SQLite."""
     rows = connection.execute(
         """

@@ -6,14 +6,13 @@ publication lookup, and database status reporting.
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import sqlite3
+from pathlib import Path
 
 from .config import data_dir_was_explicitly_configured, relative_to_data_dir
 from .database import connect, ensure_abstract_schema, ensure_fulltext_schema
 from .text import normalize_for_search
-
 
 _YEAR_TOKEN_RE = re.compile(r"^(19|20)\d{2}$")
 
@@ -39,12 +38,19 @@ def _escape_fts_query(query: str) -> str:
     tokens = [token.strip() for token in query.split() if token.strip()]
     if not tokens:
         raise ValueError("query must not be empty")
-    return " AND ".join(f'"{token.replace("\"", "")}"' for token in tokens)
+    sanitized_tokens = [token.replace(chr(34), "") for token in tokens]
+    return " AND ".join(f'"{token}"' for token in sanitized_tokens)
 
 
 def _record_type_rank(record_type: str) -> int:
     """Rank paper-like records ahead of proceedings/container records."""
-    if record_type in {"article", "inproceedings", "incollection", "phdthesis", "mastersthesis"}:
+    if record_type in {
+        "article",
+        "inproceedings",
+        "incollection",
+        "phdthesis",
+        "mastersthesis",
+    }:
         return 0
     if record_type in {"informal", "data"}:
         return 1
@@ -81,8 +87,16 @@ def search_publications(
     if query_years:
         inferred_year_from = min(query_years)
         inferred_year_to = max(query_years)
-        effective_year_from = inferred_year_from if effective_year_from is None else max(effective_year_from, inferred_year_from)
-        effective_year_to = inferred_year_to if effective_year_to is None else min(effective_year_to, inferred_year_to)
+        effective_year_from = (
+            inferred_year_from
+            if effective_year_from is None
+            else max(effective_year_from, inferred_year_from)
+        )
+        effective_year_to = (
+            inferred_year_to
+            if effective_year_to is None
+            else min(effective_year_to, inferred_year_to)
+        )
 
     fts_query = _escape_fts_query(" ".join(text_tokens)) if text_tokens else None
 
@@ -114,7 +128,7 @@ def search_publications(
         )
         parameters.append(f"%{normalize_for_search(venue)}%")
 
-    where_clause = ' AND '.join(conditions) if conditions else '1 = 1'
+    where_clause = " AND ".join(conditions) if conditions else "1 = 1"
     sql = f"""
         SELECT
             publications.id,
@@ -152,7 +166,9 @@ def search_publications(
     return {"query": query, "count": len(results), "results": results}
 
 
-def get_publication(database_path: str | Path, dblp_key: str) -> dict[str, object] | None:
+def get_publication(
+    database_path: str | Path, dblp_key: str
+) -> dict[str, object] | None:
     """Load one publication and its related normalized records.
 
     The returned payload includes contributors, venues, identifiers, extra
@@ -193,20 +209,28 @@ def get_publication(database_path: str | Path, dblp_key: str) -> dict[str, objec
         "venues": _venues_for_publication(connection, row["id"]),
         "abstract": _abstract_for_publication(connection, row["id"]),
         "fulltext": _fulltext_for_publication(connection, row["id"]),
-        "identifiers": [dict(identifier) for identifier in connection.execute(
-            "SELECT kind, value FROM publication_identifiers WHERE publication_id = ? ORDER BY kind, value",
-            (row["id"],),
-        ).fetchall()],
-        "extra_fields": [dict(field) for field in connection.execute(
-            "SELECT field_name, field_value, position FROM publication_fields WHERE publication_id = ? ORDER BY field_name, position",
-            (row["id"],),
-        ).fetchall()],
+        "identifiers": [
+            dict(identifier)
+            for identifier in connection.execute(
+                "SELECT kind, value FROM publication_identifiers WHERE publication_id = ? ORDER BY kind, value",
+                (row["id"],),
+            ).fetchall()
+        ],
+        "extra_fields": [
+            dict(field)
+            for field in connection.execute(
+                "SELECT field_name, field_value, position FROM publication_fields WHERE publication_id = ? ORDER BY field_name, position",
+                (row["id"],),
+            ).fetchall()
+        ],
     }
     connection.close()
     return publication
 
 
-def _contributors_for_publication(connection: sqlite3.Connection, publication_id: int) -> list[dict[str, object]]:
+def _contributors_for_publication(
+    connection: sqlite3.Connection, publication_id: int
+) -> list[dict[str, object]]:
     rows = connection.execute(
         """
         SELECT c.name, pc.role, pc.position
@@ -220,7 +244,9 @@ def _contributors_for_publication(connection: sqlite3.Connection, publication_id
     return [dict(row) for row in rows]
 
 
-def _venues_for_publication(connection: sqlite3.Connection, publication_id: int) -> list[dict[str, object]]:
+def _venues_for_publication(
+    connection: sqlite3.Connection, publication_id: int
+) -> list[dict[str, object]]:
     rows = connection.execute(
         """
         SELECT v.name, pv.relation_type, pv.position
@@ -323,17 +349,12 @@ def get_database_status(database_path: str | Path) -> dict[str, object]:
         status["fulltext_fetch_logs"] = connection.execute(
             "SELECT COUNT(*) FROM fulltext_fetch_logs"
         ).fetchone()[0]
-        status["import_runs"] = [
-            dict(row)
-            for row in connection.execute(
-                """
+        status["import_runs"] = [dict(row) for row in connection.execute("""
                 SELECT id, source_path, started_at, completed_at, status, records_processed
                 FROM import_runs
                 ORDER BY id DESC
                 LIMIT 5
-                """
-            ).fetchall()
-        ]
+                """).fetchall()]
     finally:
         connection.close()
     return status

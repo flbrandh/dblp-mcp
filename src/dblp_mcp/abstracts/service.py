@@ -7,11 +7,11 @@ successful abstracts, and records operational logs for all outcomes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
 import re
 import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 from ..database import connect, ensure_abstract_schema
@@ -55,7 +55,9 @@ def fetch_publication_abstract(
             raise LookupError(f"publication not found for dblp_key: {dblp_key}")
 
         if not refresh:
-            cached_abstract = _get_stored_abstract(connection, publication.publication_id)
+            cached_abstract = _get_stored_abstract(
+                connection, publication.publication_id
+            )
             if cached_abstract is not None:
                 return {
                     "dblp_key": dblp_key,
@@ -115,7 +117,9 @@ def fetch_publication_abstract(
                 )
                 continue
 
-            stored_abstract = _store_abstract(connection, publication.publication_id, result)
+            stored_abstract = _store_abstract(
+                connection, publication.publication_id, result
+            )
             _log_fetch_attempt(
                 connection,
                 publication_id=publication.publication_id,
@@ -143,8 +147,6 @@ def fetch_publication_abstract(
         }
     finally:
         connection.close()
-
-
 
 
 def fetch_publication_abstracts(
@@ -208,6 +210,7 @@ def fetch_publication_abstracts(
         "summary": summary,
         "results": results,
     }
+
 
 def _load_publication_context(
     connection: sqlite3.Connection,
@@ -278,7 +281,7 @@ def _extract_doi(value: str) -> str | None:
     )
     for prefix in prefixes:
         if lowered.startswith(prefix):
-            return normalized[len(prefix):].strip()
+            return normalized[len(prefix) :].strip()
     if "/" in normalized and " " not in normalized:
         return normalized
     return None
@@ -331,7 +334,7 @@ def _store_abstract(
     publication_id: int,
     result: AbstractFetchResult,
 ) -> dict[str, object]:
-    fetched_at = datetime.now(timezone.utc).isoformat()
+    fetched_at = datetime.now(UTC).isoformat()
     connection.execute(
         """
         INSERT INTO publication_abstracts(
@@ -407,6 +410,6 @@ def _log_fetch_attempt(
             status,
             error_code,
             _sanitize_error_message(error_message),
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(UTC).isoformat(),
         ),
     )

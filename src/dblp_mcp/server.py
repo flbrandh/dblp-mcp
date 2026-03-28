@@ -6,6 +6,8 @@ from mcp.server.fastmcp import FastMCP
 
 from .abstracts import (
     fetch_publication_abstract as run_fetch_publication_abstract,
+)
+from .abstracts import (
     fetch_publication_abstracts as run_fetch_publication_abstracts,
 )
 from .config import DEFAULT_DATABASE_PATH, DEFAULT_XML_PATH, resolve_data_path
@@ -13,12 +15,18 @@ from .diagnostics import get_recent_fetch_failures as run_get_recent_fetch_failu
 from .downloader import download_dblp_dump as run_download
 from .fulltext import (
     fetch_publication_fulltext as run_fetch_publication_fulltext,
+)
+from .fulltext import (
     fetch_publication_fulltexts as run_fetch_publication_fulltexts,
 )
 from .importer import DblpImporter
 from .search import (
     get_database_status as run_get_database_status,
+)
+from .search import (
     get_publication as run_get_publication,
+)
+from .search import (
     search_publications as run_search,
 )
 
@@ -53,7 +61,11 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
             replace: bool = False,
         ) -> dict[str, object]:
             """Download a DBLP XML-area artifact to local storage."""
-            result = run_download(destination=_sandboxed_destination_path(destination), source_url=source_url, replace=replace)
+            result = run_download(
+                destination=_sandboxed_destination_path(destination),
+                source_url=source_url,
+                replace=replace,
+            )
             return {
                 "source_url": result.source_url,
                 "destination": str(result.destination),
@@ -62,7 +74,6 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
                 "downloaded_at": result.downloaded_at,
                 "cached": result.cached,
             }
-
 
         @mcp.tool()
         def build_dblp_sqlite(
@@ -74,7 +85,9 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
             """Build the SQLite search database from a DBLP XML or XML.GZ file."""
             safe_database_path = _sandboxed_database_path(database_path)
             safe_xml_path = _sandboxed_xml_path(xml_path)
-            importer = DblpImporter(database_path=safe_database_path, batch_size=batch_size)
+            importer = DblpImporter(
+                database_path=safe_database_path, batch_size=batch_size
+            )
             return importer.import_file(xml_path=safe_xml_path, replace=replace)
 
     @mcp.tool()
@@ -100,15 +113,15 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
             venue=venue,
         )
 
-
     @mcp.tool()
     def get_publication(
         dblp_key: str,
         database_path: str = str(DEFAULT_DATABASE_PATH),
     ) -> dict[str, object] | None:
         """Return one imported publication, including cached enrichment data."""
-        return run_get_publication(database_path=_sandboxed_database_path(database_path), dblp_key=dblp_key)
-
+        return run_get_publication(
+            database_path=_sandboxed_database_path(database_path), dblp_key=dblp_key
+        )
 
     @mcp.tool()
     def fetch_publication_abstract(
@@ -123,7 +136,6 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
             refresh=refresh,
         )
 
-
     @mcp.tool()
     def fetch_publication_abstracts(
         dblp_keys: list[str],
@@ -137,7 +149,6 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
             refresh=refresh,
         )
 
-
     @mcp.tool()
     def fetch_publication_fulltext(
         dblp_key: str,
@@ -145,8 +156,11 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         refresh: bool = False,
     ) -> dict[str, object]:
         """Fetch and cache a legal full-text PDF plus extracted text for one publication."""
-        return run_fetch_publication_fulltext(database_path=_sandboxed_database_path(database_path), dblp_key=dblp_key, refresh=refresh)
-
+        return run_fetch_publication_fulltext(
+            database_path=_sandboxed_database_path(database_path),
+            dblp_key=dblp_key,
+            refresh=refresh,
+        )
 
     @mcp.tool()
     def fetch_publication_fulltexts(
@@ -155,8 +169,11 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         refresh: bool = False,
     ) -> dict[str, object]:
         """Fetch and cache legal full-text PDFs plus extracted text for multiple publications."""
-        return run_fetch_publication_fulltexts(database_path=_sandboxed_database_path(database_path), dblp_keys=dblp_keys, refresh=refresh)
-
+        return run_fetch_publication_fulltexts(
+            database_path=_sandboxed_database_path(database_path),
+            dblp_keys=dblp_keys,
+            refresh=refresh,
+        )
 
     @mcp.tool()
     def get_recent_fetch_failures(
@@ -171,13 +188,14 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
             limit=limit,
         )
 
-
     @mcp.tool()
     def get_dblp_status(
         database_path: str = str(DEFAULT_DATABASE_PATH),
     ) -> dict[str, object]:
         """Report file existence plus import, abstract, fulltext, and log counters."""
-        return run_get_database_status(database_path=_sandboxed_database_path(database_path))
+        return run_get_database_status(
+            database_path=_sandboxed_database_path(database_path)
+        )
 
     return mcp
 

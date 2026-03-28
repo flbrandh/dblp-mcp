@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from hashlib import sha256
 from pathlib import Path
-import os
 
 from ..config import DEFAULT_DATA_DIR
 

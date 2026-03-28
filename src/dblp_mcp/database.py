@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
-
+from pathlib import Path
 
 SCHEMA_VERSION = 4
 
@@ -20,8 +19,7 @@ def connect(database_path: str | Path) -> sqlite3.Connection:
 
 
 def create_schema(connection: sqlite3.Connection) -> None:
-    connection.executescript(
-        f"""
+    connection.executescript(f"""
         CREATE TABLE IF NOT EXISTS metadata (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -177,12 +175,10 @@ def create_schema(connection: sqlite3.Connection) -> None:
         INSERT INTO metadata(key, value)
         VALUES ('schema_version', '{SCHEMA_VERSION}')
         ON CONFLICT(key) DO UPDATE SET value = excluded.value;
-        """
-    )
+        """)
 
     connection.execute("DROP TABLE IF EXISTS publication_search")
-    connection.execute(
-        """
+    connection.execute("""
         CREATE VIRTUAL TABLE publication_search USING fts5(
             dblp_key UNINDEXED,
             title,
@@ -190,8 +186,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
             venues,
             content=''
         )
-        """
-    )
+        """)
 
 
 def ensure_abstract_schema(connection: sqlite3.Connection) -> None:
@@ -200,8 +195,7 @@ def ensure_abstract_schema(connection: sqlite3.Connection) -> None:
     This helper is additive: it extends previously built databases with the
     abstract cache and abstract log tables without rebuilding the full FTS index.
     """
-    connection.executescript(
-        f"""
+    connection.executescript(f"""
         CREATE TABLE IF NOT EXISTS publication_abstracts (
             publication_id INTEGER PRIMARY KEY,
             abstract_text TEXT NOT NULL,
@@ -231,14 +225,12 @@ def ensure_abstract_schema(connection: sqlite3.Connection) -> None:
         INSERT INTO metadata(key, value)
         VALUES ('schema_version', '{SCHEMA_VERSION}')
         ON CONFLICT(key) DO UPDATE SET value = excluded.value;
-        """
-    )
+        """)
 
 
 def rebuild_search_index(connection: sqlite3.Connection) -> None:
     connection.execute("DELETE FROM publication_search")
-    connection.execute(
-        """
+    connection.execute("""
         INSERT INTO publication_search(rowid, dblp_key, title, contributors, venues)
         SELECT
             publications.id,
@@ -265,14 +257,12 @@ def rebuild_search_index(connection: sqlite3.Connection) -> None:
                 ''
             )
         FROM publications
-        """
-    )
+        """)
 
 
 def ensure_fulltext_schema(connection: sqlite3.Connection) -> None:
     """Create fulltext-related tables on existing databases if needed."""
-    connection.executescript(
-        f"""
+    connection.executescript(f"""
         CREATE TABLE IF NOT EXISTS publication_fulltexts (
             publication_id INTEGER PRIMARY KEY,
             provider TEXT NOT NULL,
@@ -309,5 +299,4 @@ def ensure_fulltext_schema(connection: sqlite3.Connection) -> None:
         INSERT INTO metadata(key, value)
         VALUES ('schema_version', '{SCHEMA_VERSION}')
         ON CONFLICT(key) DO UPDATE SET value = excluded.value;
-        """
-    )
+        """)
