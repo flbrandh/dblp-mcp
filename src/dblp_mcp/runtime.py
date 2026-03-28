@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+import argparse
+
+from .config import data_dir_was_explicitly_configured
+from .server import create_mcp
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the DBLP MCP server")
+    parser.add_argument(
+        "--privileged",
+        action="store_true",
+        help="Expose download/build maintenance tools in addition to normal read/search tools",
+    )
+    parser.add_argument(
+        "--allow-implicit-data-dir",
+        action="store_true",
+        help="Allow fallback to ./data when DBLP_MCP_DATA_DIR is not set",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if not data_dir_was_explicitly_configured() and not args.allow_implicit_data_dir:
+        raise SystemExit("DBLP_MCP_DATA_DIR must be set explicitly; use --allow-implicit-data-dir to fall back to ./data")
+    create_mcp(privileged=args.privileged).run()
