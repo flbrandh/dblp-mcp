@@ -6,7 +6,11 @@ import json
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from ...config import ABSTRACT_TIMEOUT_SECONDS, ensure_network_enabled
+from ...config import (
+    ABSTRACT_TIMEOUT_SECONDS,
+    ensure_abstract_network_enabled,
+    provider_request_delay,
+)
 from ...text import normalize_for_search, normalize_text
 from ..base import AbstractFetchResult, AbstractLookup
 
@@ -30,7 +34,8 @@ class OpenAlexProvider:
         if source_url is None:
             return None
 
-        ensure_network_enabled()
+        ensure_abstract_network_enabled()
+        provider_request_delay(self.name)
         request = Request(source_url, headers={"User-Agent": USER_AGENT})
         with urlopen(request, timeout=ABSTRACT_TIMEOUT_SECONDS) as response:
             final_url = response.geturl() if hasattr(response, "geturl") else source_url

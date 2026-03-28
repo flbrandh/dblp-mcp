@@ -278,7 +278,7 @@ def test_fetch_publication_abstract_handles_network_disabled(
     database_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "dblp_mcp.abstracts.providers.openalex.ensure_network_enabled",
+        "dblp_mcp.abstracts.providers.openalex.ensure_abstract_network_enabled",
         lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
     )
     monkeypatch.setattr(
@@ -297,7 +297,7 @@ def test_fetch_publication_abstracts_classifies_provider_errors(
     database_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "dblp_mcp.abstracts.providers.openalex.ensure_network_enabled",
+        "dblp_mcp.abstracts.providers.openalex.ensure_abstract_network_enabled",
         lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
     )
 
@@ -305,3 +305,11 @@ def test_fetch_publication_abstracts_classifies_provider_errors(
 
     assert result["summary"]["not_found"] == 1
     assert result["results"][0]["status"] == "not_found"
+
+
+def test_fetch_publication_abstracts_rejects_oversized_batches(
+    database_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("dblp_mcp.abstracts.service.MAX_ABSTRACT_BATCH_SIZE", 1)
+    with pytest.raises(ValueError, match="at most 1"):
+        fetch_publication_abstracts(database_path, ["a", "b"])

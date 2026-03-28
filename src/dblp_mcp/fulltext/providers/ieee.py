@@ -5,7 +5,11 @@ from __future__ import annotations
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from ...config import FULLTEXT_TIMEOUT_SECONDS
+from ...config import (
+    FULLTEXT_TIMEOUT_SECONDS,
+    ensure_fulltext_network_enabled,
+    provider_request_delay,
+)
 from ..base import FulltextCandidate, FulltextLookup
 
 DOI_RESOLVER_URL = "https://doi.org/{doi}"
@@ -24,6 +28,8 @@ class IeeePdfProvider:
         if lookup.doi is None:
             return []
         resolver_url = DOI_RESOLVER_URL.format(doi=quote(lookup.doi, safe=""))
+        ensure_fulltext_network_enabled()
+        provider_request_delay(self.name)
         request = Request(resolver_url, headers={"User-Agent": USER_AGENT})
         with urlopen(request, timeout=FULLTEXT_TIMEOUT_SECONDS) as response:
             final_url = (

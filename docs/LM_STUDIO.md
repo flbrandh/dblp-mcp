@@ -64,8 +64,9 @@ Example healthy values in this repository:
 - `contributors`: about 4.1 million
 
 ### 2. `search_publications`
-Example query:
-- `graph neural networks`
+Example term groups:
+- `[["graph", "neural"], ["networks"]]` means `(graph OR neural) AND networks`
+- `[["sigcomm"], ["2024"]]` means `sigcomm AND year=2024`
 
 This confirms LM Studio can both see the DB and run FTS queries.
 
@@ -175,3 +176,26 @@ Network-backed abstract/fulltext tools can be disabled with `DBLP_MCP_ENABLE_NET
 
 
 For operator debugging, you can also call `get_recent_fetch_failures` to inspect why abstract/fulltext retrieval failed recently.
+
+
+## Structured search semantics
+
+`search_publications` no longer accepts a free-form query string. Instead it uses structured `term_groups`:
+
+- each inner list is an **OR** group
+- the outer list combines those groups with **AND**
+- year-like terms such as `2024` are extracted into year filters automatically
+
+Examples:
+
+- `[["graph"], ["neural"], ["networks"]]` -> `graph AND neural AND networks`
+- `[["graph", "neural"], ["routing", "congestion"]]` -> `(graph OR neural) AND (routing OR congestion)`
+- `[["sigcomm"], ["2024"]]` -> `sigcomm AND year=2024`
+
+
+Additional controls:
+- `DBLP_MCP_ENABLE_ABSTRACT_NETWORK=0` disables abstract providers only
+- `DBLP_MCP_ENABLE_FULLTEXT_NETWORK=0` disables fulltext providers only
+- batch tools enforce configurable limits for abstract and fulltext requests
+
+- `DBLP_MCP_PROVIDER_DELAY_MIN_SECONDS` / `DBLP_MCP_PROVIDER_DELAY_MAX_SECONDS` add a small randomized delay before abstract/fulltext provider requests

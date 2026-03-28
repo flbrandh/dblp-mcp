@@ -50,3 +50,18 @@ python app.py --privileged
 ## 5. Health and debugging
 
 Use MCP tools `get_dblp_status` and `get_recent_fetch_failures` to verify the database and inspect recent enrichment failures.
+
+
+## Structured search semantics
+
+`search_publications` no longer accepts a free-form query string. Instead it uses structured `term_groups`:
+
+- each inner list is an **OR** group
+- the outer list combines those groups with **AND**
+- year-like terms such as `2024` are extracted into year filters automatically
+
+Examples:
+
+- `[["graph"], ["neural"], ["networks"]]` -> `graph AND neural AND networks`
+- `[["graph", "neural"], ["routing", "congestion"]]` -> `(graph OR neural) AND (routing OR congestion)`
+- `[["sigcomm"], ["2024"]]` -> `sigcomm AND year=2024`

@@ -10,36 +10,52 @@ import re
 import sqlite3
 from pathlib import Path
 
-from .config import data_dir_was_explicitly_configured, relative_to_data_dir
+from .config import (
+    data_dir_was_explicitly_configured,
+    display_path,
+    relative_to_data_dir,
+)
 from .database import connect, ensure_abstract_schema, ensure_fulltext_schema
 from .text import normalize_for_search
 
 _YEAR_TOKEN_RE = re.compile(r"^(19|20)\d{2}$")
 
 
-def _split_query_terms(query: str) -> tuple[list[str], list[int]]:
-    """Split text tokens from year-like tokens embedded in a search query."""
-    text_tokens = []
-    years = []
-    for token in query.split():
-        cleaned = token.strip()
-        if not cleaned:
-            continue
-        normalized = cleaned.strip(",.:;()[]{}")
-        if _YEAR_TOKEN_RE.match(normalized):
-            years.append(int(normalized))
+def _normalize_term_groups(
+    term_groups: list[list[str]],
+) -> tuple[list[list[str]], list[list[int]]]:
+    """Normalize structured term groups and extract year-like OR-groups."""
+    normalized_groups: list[list[str]] = []
+    year_groups: list[list[int]] = []
+    for group in term_groups:
+        cleaned_group: list[str] = []
+        cleaned_years: list[int] = []
+        for term in group:
+            cleaned = term.strip().strip(",.:;()[]{}")
+            if not cleaned:
+                continue
+            if _YEAR_TOKEN_RE.match(cleaned):
+                cleaned_years.append(int(cleaned))
+            else:
+                cleaned_group.append(cleaned.replace(chr(34), ""))
+        if cleaned_group:
+            normalized_groups.append(cleaned_group)
+        elif cleaned_years:
+            year_groups.append(cleaned_years)
+    return normalized_groups, year_groups
+
+
+def _build_fts_query(term_groups: list[list[str]]) -> str | None:
+    """Build an FTS query where inner groups mean OR and groups mean AND."""
+    if not term_groups:
+        return None
+    parts = []
+    for group in term_groups:
+        if len(group) == 1:
+            parts.append(f'"{group[0]}"')
         else:
-            text_tokens.append(normalized)
-    return text_tokens, years
-
-
-def _escape_fts_query(query: str) -> str:
-    """Escape user tokens into a conservative SQLite FTS ``AND`` query."""
-    tokens = [token.strip() for token in query.split() if token.strip()]
-    if not tokens:
-        raise ValueError("query must not be empty")
-    sanitized_tokens = [token.replace(chr(34), "") for token in tokens]
-    return " AND ".join(f'"{token}"' for token in sanitized_tokens)
+            parts.append("(" + " OR ".join(f'"{term}"' for term in group) + ")")
+    return " AND ".join(parts)
 
 
 def _record_type_rank(record_type: str) -> int:
@@ -61,7 +77,7 @@ def _record_type_rank(record_type: str) -> int:
 
 def search_publications(
     database_path: str | Path,
-    query: str,
+    term_groups: list[list[str]],
     *,
     limit: int = 10,
     year_from: int | None = None,
@@ -69,36 +85,26 @@ def search_publications(
     record_types: list[str] | None = None,
     contributor: str | None = None,
     venue: str | None = None,
+    include_contributors: bool = False,
+    include_venues: bool = False,
 ) -> dict[str, object]:
-    """Search publications by full-text query plus optional structured filters.
+    """Search publications with structured OR-groups combined by AND.
 
-    The query parser treats year-like tokens as year filters and ranks
-    paper-like records ahead of proceedings volumes so common venue/year
-    searches surface individual papers first.
+    Each inner list in ``term_groups`` is treated as an OR-group. The outer list
+    is treated as AND across groups. Year-like terms are extracted into year
+    filters automatically. By default, list results are kept compact;
+    contributors and venues can be added explicitly.
     """
-    if limit < 1 or limit > 100:
-        raise ValueError("limit must be between 1 and 100")
+    if limit < 1 or limit > 1000:
+        raise ValueError("limit must be between 1 and 1000")
 
-    text_tokens, query_years = _split_query_terms(query)
-    if not text_tokens and not query_years:
-        raise ValueError("query must not be empty")
+    normalized_groups, year_groups = _normalize_term_groups(term_groups)
+    if not normalized_groups and not year_groups:
+        raise ValueError("term_groups must contain at least one non-empty term")
     effective_year_from = year_from
     effective_year_to = year_to
-    if query_years:
-        inferred_year_from = min(query_years)
-        inferred_year_to = max(query_years)
-        effective_year_from = (
-            inferred_year_from
-            if effective_year_from is None
-            else max(effective_year_from, inferred_year_from)
-        )
-        effective_year_to = (
-            inferred_year_to
-            if effective_year_to is None
-            else min(effective_year_to, inferred_year_to)
-        )
 
-    fts_query = _escape_fts_query(" ".join(text_tokens)) if text_tokens else None
+    fts_query = _build_fts_query(normalized_groups)
 
     connection = connect(database_path)
     conditions: list[str] = []
@@ -113,6 +119,10 @@ def search_publications(
     if effective_year_to is not None:
         conditions.append("publications.year <= ?")
         parameters.append(effective_year_to)
+    for year_group in year_groups:
+        placeholders = ", ".join("?" for _ in year_group)
+        conditions.append(f"publications.year IN ({placeholders})")
+        parameters.extend(year_group)
     if record_types:
         placeholders = ", ".join("?" for _ in record_types)
         conditions.append(f"publications.record_type IN ({placeholders})")
@@ -150,29 +160,37 @@ def search_publications(
     """
     parameters.append(limit)
     rows = connection.execute(sql, parameters).fetchall()
-    results = [
-        {
+    results = []
+    for row in rows:
+        item: dict[str, object] = {
             "dblp_key": row["dblp_key"],
             "record_type": row["record_type"],
             "title": row["title"],
             "year": row["year"],
             "score": row["score"],
-            "contributors": _contributors_for_publication(connection, row["id"]),
-            "venues": _venues_for_publication(connection, row["id"]),
         }
-        for row in rows
-    ]
+        if include_contributors:
+            item["contributors"] = _contributors_for_publication(connection, row["id"])
+        if include_venues:
+            item["venues"] = _venues_for_publication(connection, row["id"])
+        results.append(item)
     connection.close()
-    return {"query": query, "count": len(results), "results": results}
+    return {"term_groups": normalized_groups, "count": len(results), "results": results}
 
 
 def get_publication(
-    database_path: str | Path, dblp_key: str
+    database_path: str | Path,
+    dblp_key: str,
+    *,
+    include_identifiers: bool = False,
+    include_extra_fields: bool = False,
+    include_fulltext: bool = False,
 ) -> dict[str, object] | None:
     """Load one publication and its related normalized records.
 
-    The returned payload includes contributors, venues, identifiers, extra
-    fields, and cached abstract data when available.
+    The returned payload includes core bibliographic fields, contributors, venues,
+    and full abstract text when available. Identifiers, extra fields, and
+    fulltext metadata are omitted by default to keep MCP responses compact.
     """
     connection = connect(database_path)
     ensure_abstract_schema(connection)
@@ -191,7 +209,7 @@ def get_publication(
         connection.close()
         return None
 
-    publication = {
+    publication: dict[str, object] = {
         "dblp_key": row["dblp_key"],
         "record_type": row["record_type"],
         "title": row["title"],
@@ -208,22 +226,25 @@ def get_publication(
         "contributors": _contributors_for_publication(connection, row["id"]),
         "venues": _venues_for_publication(connection, row["id"]),
         "abstract": _abstract_for_publication(connection, row["id"]),
-        "fulltext": _fulltext_for_publication(connection, row["id"]),
-        "identifiers": [
+    }
+    if include_fulltext:
+        publication["fulltext"] = _fulltext_for_publication(connection, row["id"])
+    if include_identifiers:
+        publication["identifiers"] = [
             dict(identifier)
             for identifier in connection.execute(
                 "SELECT kind, value FROM publication_identifiers WHERE publication_id = ? ORDER BY kind, value",
                 (row["id"],),
             ).fetchall()
-        ],
-        "extra_fields": [
+        ]
+    if include_extra_fields:
+        publication["extra_fields"] = [
             dict(field)
             for field in connection.execute(
                 "SELECT field_name, field_value, position FROM publication_fields WHERE publication_id = ? ORDER BY field_name, position",
                 (row["id"],),
             ).fetchall()
-        ],
-    }
+        ]
     connection.close()
     return publication
 
@@ -310,7 +331,7 @@ def get_database_status(database_path: str | Path) -> dict[str, object]:
     """
     database = Path(database_path)
     status: dict[str, object] = {
-        "database_path": str(database),
+        "database_path": (display_path(database)),
         "exists": database.exists(),
         "data_dir_configured": data_dir_was_explicitly_configured(),
     }
@@ -349,12 +370,21 @@ def get_database_status(database_path: str | Path) -> dict[str, object]:
         status["fulltext_fetch_logs"] = connection.execute(
             "SELECT COUNT(*) FROM fulltext_fetch_logs"
         ).fetchone()[0]
-        status["import_runs"] = [dict(row) for row in connection.execute("""
-                SELECT id, source_path, started_at, completed_at, status, records_processed
+        status["import_runs"] = [
+            {
+                "id": row["id"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "status": row["status"],
+                "records_processed": row["records_processed"],
+            }
+            for row in connection.execute("""
+                SELECT id, started_at, completed_at, status, records_processed
                 FROM import_runs
                 ORDER BY id DESC
                 LIMIT 5
-                """).fetchall()]
+                """).fetchall()
+        ]
     finally:
         connection.close()
     return status

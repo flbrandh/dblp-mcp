@@ -64,10 +64,12 @@ def test_import_file_builds_searchable_database(tmp_path: Path) -> None:
     assert result["stats"]["publications"] == 2
     assert result["stats"]["contributors"] == 4
 
-    search_result = search_publications(database_path, "streaming bibliographies")
+    search_result = search_publications(
+        database_path, [["streaming"], ["bibliographies"]]
+    )
     assert search_result["count"] == 1
     assert search_result["results"][0]["dblp_key"] == "journals/test/Example2024"
-    assert search_result["results"][0]["contributors"][0]["name"] == "Alice Example"
+    assert "contributors" not in search_result["results"][0]
 
 
 def test_get_publication_returns_normalized_related_data(tmp_path: Path) -> None:
@@ -86,6 +88,9 @@ def test_get_publication_returns_normalized_related_data(tmp_path: Path) -> None
     assert publication["venues"][0]["name"] == "Proceedings of the Example Conference"
     assert publication["contributors"][0]["role"] == "author"
     assert publication["contributors"][1]["role"] == "editor"
+    assert "identifiers" not in publication
+    assert "extra_fields" not in publication
+    assert "fulltext" not in publication
 
 
 def test_import_file_supports_gzip_input(tmp_path: Path) -> None:
@@ -99,7 +104,7 @@ def test_import_file_supports_gzip_input(tmp_path: Path) -> None:
     result = importer.import_file(xml_path)
 
     assert result["stats"]["publications"] == 2
-    search_result = search_publications(database_path, "offline index")
+    search_result = search_publications(database_path, [["offline"], ["index"]])
     assert search_result["count"] == 1
 
 
@@ -190,7 +195,9 @@ def test_import_file_ignores_duplicate_identifiers(tmp_path: Path) -> None:
     importer = DblpImporter(database_path)
     result = importer.import_file(xml_path)
 
-    publication = get_publication(database_path, "journals/test/Duplicate2024")
+    publication = get_publication(
+        database_path, "journals/test/Duplicate2024", include_identifiers=True
+    )
     assert result["stats"]["identifiers"] == 1
     assert publication is not None
     assert publication["identifiers"] == [
@@ -210,6 +217,7 @@ def test_get_database_status_reports_imported_content(tmp_path: Path) -> None:
     status = get_database_status(database_path)
 
     assert status["exists"] is True
+    assert status["database_path"] == "dblp.sqlite"
     assert status["publications"] == 2
     assert status["contributors"] == 4
     assert status["abstracts"] == 0
@@ -253,7 +261,7 @@ def test_search_publications_infers_year_and_prioritizes_papers(tmp_path: Path) 
     importer = DblpImporter(database_path)
     importer.import_file(xml_path)
 
-    result = search_publications(database_path, "sigcomm 2024", limit=5)
+    result = search_publications(database_path, [["sigcomm"], ["2024"]], limit=5)
 
     assert result["count"] >= 2
     assert result["results"][0]["dblp_key"] == "conf/sigcomm/Paper2024"
@@ -267,8 +275,10 @@ def test_search_publications_rejects_blank_query(tmp_path: Path) -> None:
     _write_local_dtd(tmp_path)
     DblpImporter(database_path).import_file(xml_path)
 
-    with pytest.raises(ValueError, match="query must not be empty"):
-        search_publications(database_path, "   ")
+    with pytest.raises(
+        ValueError, match="term_groups must contain at least one non-empty term"
+    ):
+        search_publications(database_path, [["   "]])
 
 
 def test_search_publications_rejects_invalid_limits(tmp_path: Path) -> None:
@@ -278,10 +288,10 @@ def test_search_publications_rejects_invalid_limits(tmp_path: Path) -> None:
     _write_local_dtd(tmp_path)
     DblpImporter(database_path).import_file(xml_path)
 
-    with pytest.raises(ValueError, match="limit must be between 1 and 100"):
-        search_publications(database_path, "streaming", limit=0)
-    with pytest.raises(ValueError, match="limit must be between 1 and 100"):
-        search_publications(database_path, "streaming", limit=101)
+    with pytest.raises(ValueError, match="limit must be between 1 and 1000"):
+        search_publications(database_path, [["streaming"]], limit=0)
+    with pytest.raises(ValueError, match="limit must be between 1 and 1000"):
+        search_publications(database_path, [["streaming"]], limit=1001)
 
 
 def test_search_publications_supports_year_only_queries(tmp_path: Path) -> None:
@@ -291,7 +301,7 @@ def test_search_publications_supports_year_only_queries(tmp_path: Path) -> None:
     _write_local_dtd(tmp_path)
     DblpImporter(database_path).import_file(xml_path)
 
-    result = search_publications(database_path, "2024", limit=10)
+    result = search_publications(database_path, [["2024"]], limit=10)
 
     assert result["count"] == 1
     assert result["results"][0]["dblp_key"] == "journals/test/Example2024"
@@ -306,7 +316,7 @@ def test_search_publications_combines_structured_filters(tmp_path: Path) -> None
 
     result = search_publications(
         database_path,
-        "offline index",
+        [["offline"], ["index"]],
         contributor="carol",
         venue="example conference",
         record_types=["inproceedings"],
@@ -328,3 +338,103 @@ def test_download_respects_disabled_network_setting(
 
     with pytest.raises(RuntimeError, match="network disabled"):
         download_dblp_dump(destination=destination, replace=True)
+
+
+def test_search_publications_can_include_related_entities(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    result = search_publications(
+        database_path,
+        [["streaming"], ["bibliographies"]],
+        include_contributors=True,
+        include_venues=True,
+    )
+
+    assert result["results"][0]["contributors"][0]["name"] == "Alice Example"
+    assert result["results"][0]["venues"][0]["name"] == "Journal of Test Data"
+
+
+def test_get_publication_can_include_optional_details(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    publication = get_publication(
+        database_path,
+        "journals/test/Example2024",
+        include_identifiers=True,
+        include_extra_fields=True,
+        include_fulltext=True,
+    )
+
+    assert publication is not None
+    assert publication["identifiers"][0]["kind"] in {"doi", "ee"}
+    assert "extra_fields" in publication
+    assert "fulltext" in publication
+
+
+def test_search_publications_uses_or_within_groups(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    result = search_publications(
+        database_path, [["streaming", "offline"], ["bibliographies", "index"]]
+    )
+
+    assert result["count"] == 2
+
+
+def test_search_publications_rejects_empty_term_groups(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    with pytest.raises(
+        ValueError, match="term_groups must contain at least one non-empty term"
+    ):
+        search_publications(database_path, [])
+
+
+def test_search_publications_year_groups_preserve_and_or_semantics(
+    tmp_path: Path,
+) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    _write_local_dtd(tmp_path)
+    xml_path.write_text(
+        """<?xml version="1.0" encoding="ISO-8859-1"?>
+<dblp>
+  <article key="journals/test/Y2023" mdate="2023-01-01">
+    <author>Alice Example</author><title>Year 2023</title><year>2023</year><journal>Journal</journal>
+  </article>
+  <article key="journals/test/Y2024" mdate="2024-01-01">
+    <author>Alice Example</author><title>Year 2024</title><year>2024</year><journal>Journal</journal>
+  </article>
+  <article key="journals/test/Y2025" mdate="2025-01-01">
+    <author>Alice Example</author><title>Year 2025</title><year>2025</year><journal>Journal</journal>
+  </article>
+</dblp>
+""",
+        encoding="utf-8",
+    )
+    DblpImporter(database_path).import_file(xml_path)
+
+    or_result = search_publications(database_path, [["2023", "2025"]], limit=10)
+    and_result = search_publications(database_path, [["2023"], ["2025"]], limit=10)
+
+    assert {item["dblp_key"] for item in or_result["results"]} == {
+        "journals/test/Y2023",
+        "journals/test/Y2025",
+    }
+    assert and_result["count"] == 0

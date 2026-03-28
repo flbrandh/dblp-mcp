@@ -61,14 +61,18 @@ def test_cli_search_command_prints_json(monkeypatch: pytest.MonkeyPatch) -> None
     lines: list[str] = []
     monkeypatch.setattr(
         "dblp_mcp.cli.search_publications",
-        lambda **kwargs: {"query": kwargs["query"], "count": 0, "results": []},
+        lambda **kwargs: {
+            "term_groups": kwargs["term_groups"],
+            "count": 0,
+            "results": [],
+        },
     )
     monkeypatch.setattr("builtins.print", lambda value: lines.append(value))
 
-    cli_main(["search", "--query", "test query"])
+    cli_main(["search", "--term-group", "test query"])
 
     payload = json.loads(lines[0])
-    assert payload["query"] == "test query"
+    assert payload["term_groups"] == [["test", "query"]]
 
 
 def test_cli_get_command_prints_null(monkeypatch: pytest.MonkeyPatch) -> None:

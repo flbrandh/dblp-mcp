@@ -92,7 +92,7 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
 
     @mcp.tool()
     def search_publications(
-        query: str,
+        term_groups: list[list[str]],
         database_path: str = str(DEFAULT_DATABASE_PATH),
         limit: int = 10,
         year_from: int | None = None,
@@ -100,27 +100,38 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         record_types: list[str] | None = None,
         contributor: str | None = None,
         venue: str | None = None,
+        include_contributors: bool = False,
+        include_venues: bool = False,
     ) -> dict[str, object]:
         """Run full-text and structured search over the imported DBLP database."""
         return run_search(
             database_path=_sandboxed_database_path(database_path),
-            query=query,
+            term_groups=term_groups,
             limit=limit,
             year_from=year_from,
             year_to=year_to,
             record_types=record_types,
             contributor=contributor,
             venue=venue,
+            include_contributors=include_contributors,
+            include_venues=include_venues,
         )
 
     @mcp.tool()
     def get_publication(
         dblp_key: str,
         database_path: str = str(DEFAULT_DATABASE_PATH),
+        include_identifiers: bool = False,
+        include_extra_fields: bool = False,
+        include_fulltext: bool = False,
     ) -> dict[str, object] | None:
         """Return one imported publication, including cached enrichment data."""
         return run_get_publication(
-            database_path=_sandboxed_database_path(database_path), dblp_key=dblp_key
+            database_path=_sandboxed_database_path(database_path),
+            dblp_key=dblp_key,
+            include_identifiers=include_identifiers,
+            include_extra_fields=include_extra_fields,
+            include_fulltext=include_fulltext,
         )
 
     @mcp.tool()
@@ -128,7 +139,7 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         dblp_key: str,
         database_path: str = str(DEFAULT_DATABASE_PATH),
         refresh: bool = False,
-    ) -> dict[str, object]:
+    ) -> object:
         """Fetch and cache an abstract for an imported publication."""
         return run_fetch_publication_abstract(
             database_path=_sandboxed_database_path(database_path),
@@ -141,7 +152,7 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         dblp_keys: list[str],
         database_path: str = str(DEFAULT_DATABASE_PATH),
         refresh: bool = False,
-    ) -> dict[str, object]:
+    ) -> object:
         """Fetch and cache abstracts for multiple imported publications."""
         return run_fetch_publication_abstracts(
             database_path=_sandboxed_database_path(database_path),
@@ -154,12 +165,16 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         dblp_key: str,
         database_path: str = str(DEFAULT_DATABASE_PATH),
         refresh: bool = False,
-    ) -> dict[str, object]:
+        include_text: bool = False,
+        excerpt_chars: int = 2000,
+    ) -> object:
         """Fetch and cache a legal full-text PDF plus extracted text for one publication."""
         return run_fetch_publication_fulltext(
             database_path=_sandboxed_database_path(database_path),
             dblp_key=dblp_key,
             refresh=refresh,
+            include_text=include_text,
+            excerpt_chars=excerpt_chars,
         )
 
     @mcp.tool()
@@ -167,12 +182,16 @@ def create_mcp(*, privileged: bool = False) -> FastMCP:
         dblp_keys: list[str],
         database_path: str = str(DEFAULT_DATABASE_PATH),
         refresh: bool = False,
-    ) -> dict[str, object]:
+        include_text: bool = False,
+        excerpt_chars: int = 2000,
+    ) -> object:
         """Fetch and cache legal full-text PDFs plus extracted text for multiple publications."""
         return run_fetch_publication_fulltexts(
             database_path=_sandboxed_database_path(database_path),
             dblp_keys=dblp_keys,
             refresh=refresh,
+            include_text=include_text,
+            excerpt_chars=excerpt_chars,
         )
 
     @mcp.tool()

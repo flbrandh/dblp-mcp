@@ -12,8 +12,10 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 from urllib.parse import urlparse
 
+from ..config import MAX_ABSTRACT_BATCH_SIZE
 from ..database import connect, ensure_abstract_schema
 from ..text import normalize_text
 from .base import AbstractFetchResult, AbstractLookup
@@ -23,6 +25,20 @@ _ARXIV_ID_RE = re.compile(
     r"^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?$",
     re.IGNORECASE,
 )
+
+
+class AbstractPayload(TypedDict):
+    text: str
+    provider: str
+    source_url: str
+    fetched_at: str
+
+
+class AbstractResult(TypedDict, total=False):
+    dblp_key: str
+    refresh: bool
+    status: str
+    abstract: AbstractPayload | None
 
 
 @dataclass(slots=True)
@@ -162,6 +178,10 @@ def fetch_publication_abstracts(
     """
     if not dblp_keys:
         raise ValueError("dblp_keys must not be empty")
+    if len(dblp_keys) > MAX_ABSTRACT_BATCH_SIZE:
+        raise ValueError(
+            f"dblp_keys must contain at most {MAX_ABSTRACT_BATCH_SIZE} entries"
+        )
 
     results: list[dict[str, object]] = []
     summary = {

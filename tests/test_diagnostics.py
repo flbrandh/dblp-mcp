@@ -68,6 +68,20 @@ def test_get_recent_fetch_failures_returns_abstract_and_fulltext_entries(
 
     assert result["count"] == 2
     assert {item["category"] for item in result["results"]} == {"abstract", "fulltext"}
+    assert all(
+        item["attempted_url_redacted"].endswith("/...") for item in result["results"]
+    )
+    assert all(
+        item["error_message"]
+        in {
+            "provider error",
+            "http error",
+            "network disabled",
+            "redirect error",
+            "pdf validation error",
+        }
+        for item in result["results"]
+    )
 
 
 def test_get_recent_fetch_failures_validates_arguments(tmp_path: Path) -> None:

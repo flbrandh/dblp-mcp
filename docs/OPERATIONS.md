@@ -158,3 +158,11 @@ The MCP server hides `download_dblp_dump` and `build_dblp_sqlite` unless it is l
 - Tune `DBLP_MCP_ABSTRACT_TIMEOUT_SECONDS`, `DBLP_MCP_FULLTEXT_TIMEOUT_SECONDS`, and `DBLP_MCP_MAX_FULLTEXT_PDF_BYTES` for your environment.
 
 Use `get_recent_fetch_failures` to inspect recent abstract/fulltext fetch failures without opening SQLite manually.
+
+
+Additional controls:
+- `DBLP_MCP_ENABLE_ABSTRACT_NETWORK=0` disables abstract providers only
+- `DBLP_MCP_ENABLE_FULLTEXT_NETWORK=0` disables fulltext providers only
+- batch tools enforce configurable limits for abstract and fulltext requests
+
+- `DBLP_MCP_PROVIDER_DELAY_MIN_SECONDS` / `DBLP_MCP_PROVIDER_DELAY_MAX_SECONDS` add a small randomized default delay before provider requests; provider-specific overrides use names like `DBLP_MCP_PROVIDER_DELAY_OPENALEX_MIN_SECONDS` and `DBLP_MCP_PROVIDER_DELAY_IEEE_PDF_MAX_SECONDS`

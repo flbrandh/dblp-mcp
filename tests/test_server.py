@@ -47,7 +47,7 @@ def test_unprivileged_search_tool_rejects_paths_outside_data_dir() -> None:
     mcp = create_mcp(privileged=False)
     with pytest.raises(ValueError, match="DBLP_MCP_DATA_DIR"):
         _tool_fn(mcp, "search_publications")(
-            query="test", database_path="../outside.sqlite"
+            term_groups=[["test"]], database_path="../outside.sqlite"
         )
 
 

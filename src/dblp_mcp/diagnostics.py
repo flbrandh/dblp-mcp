@@ -15,11 +15,39 @@ class FailureEntry(TypedDict):
     category: str
     dblp_key: str | None
     provider: str
-    attempted_url: str | None
+    attempted_url_redacted: str | None
     status: str
     error_code: str | None
     error_message: str | None
     created_at: str
+
+
+def _redact_error_message(error_message: str | None) -> str | None:
+    """Redact verbose error messages down to a stable short form."""
+    if not error_message:
+        return None
+    lowered = error_message.casefold()
+    if "network" in lowered and "disabled" in lowered:
+        return "network disabled"
+    if "http" in lowered:
+        return "http error"
+    if "redirect" in lowered:
+        return "redirect error"
+    if "pdf" in lowered:
+        return "pdf validation error"
+    return "provider error"
+
+
+def _redact_url(url: str | None) -> str | None:
+    """Redact URLs down to scheme and host for safer diagnostics."""
+    if not url:
+        return None
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}/..."
 
 
 def get_recent_fetch_failures(
@@ -65,7 +93,22 @@ def _abstract_failures(
         """,
         (limit,),
     ).fetchall()
-    return [cast(FailureEntry, dict(row) | {"category": "abstract"}) for row in rows]
+    return [
+        cast(
+            FailureEntry,
+            {
+                "category": "abstract",
+                "dblp_key": row["dblp_key"],
+                "provider": row["provider"],
+                "attempted_url_redacted": _redact_url(row["attempted_url"]),
+                "status": row["status"],
+                "error_code": row["error_code"],
+                "error_message": _redact_error_message(row["error_message"]),
+                "created_at": row["created_at"],
+            },
+        )
+        for row in rows
+    ]
 
 
 def _fulltext_failures(
@@ -82,4 +125,19 @@ def _fulltext_failures(
         """,
         (limit,),
     ).fetchall()
-    return [cast(FailureEntry, dict(row) | {"category": "fulltext"}) for row in rows]
+    return [
+        cast(
+            FailureEntry,
+            {
+                "category": "fulltext",
+                "dblp_key": row["dblp_key"],
+                "provider": row["provider"],
+                "attempted_url_redacted": _redact_url(row["attempted_url"]),
+                "status": row["status"],
+                "error_code": row["error_code"],
+                "error_message": _redact_error_message(row["error_message"]),
+                "created_at": row["created_at"],
+            },
+        )
+        for row in rows
+    ]

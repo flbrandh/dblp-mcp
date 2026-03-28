@@ -122,10 +122,14 @@ def test_fetch_publication_fulltext_stores_openalex_pdf(
 
     assert result["status"] == "fetched"
     assert result["fulltext"]["provider"] == "openalex_pdf"
-    assert result["fulltext"]["text"] == "OpenAlex full text"
+    assert result["fulltext"]["excerpt"] == "OpenAlex full text"
+    assert result["fulltext"]["text_length"] == len("OpenAlex full text")
+    assert "text" not in result["fulltext"]
     assert result["fulltext"]["local_pdf_path"].endswith("fulltext.pdf")
 
-    publication = get_publication(database_path, "journals/test/OpenAlex2024")
+    publication = get_publication(
+        database_path, "journals/test/OpenAlex2024", include_fulltext=True
+    )
     assert publication is not None
     assert publication["fulltext"]["provider"] == "openalex_pdf"
 
@@ -173,7 +177,8 @@ def test_fetch_publication_fulltext_uses_cache(
 
     second = fetch_publication_fulltext(database_path, "journals/test/OpenAlex2024")
     assert second["status"] == "cached"
-    assert second["fulltext"]["text"] == "Cached full text"
+    assert second["fulltext"]["excerpt"] == "Cached full text"
+    assert "text" not in second["fulltext"]
 
 
 def test_fetch_publication_fulltext_logs_unsupported(database_path: Path) -> None:
@@ -422,7 +427,7 @@ def test_fetch_publication_fulltext_handles_network_disabled(
     database_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "dblp_mcp.fulltext.providers.openalex.ensure_network_enabled",
+        "dblp_mcp.fulltext.providers.openalex.ensure_fulltext_network_enabled",
         lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
     )
     monkeypatch.setattr(
@@ -471,3 +476,94 @@ def test_fetch_publication_fulltext_rejects_html_payloads(
     )
 
     assert result["status"] == "not_found"
+
+
+def test_fetch_publication_fulltext_can_include_full_text(
+    database_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.providers.openalex.urlopen",
+        lambda request, timeout=60: FakeResponse(
+            json.dumps(
+                {
+                    "locations": [
+                        {
+                            "pdf_url": "https://dl.acm.org/doi/pdf/10.1000/openalex-test?download=true",
+                            "landing_page_url": "https://doi.org/10.1000/openalex-test",
+                        }
+                    ]
+                }
+            ).encode("utf-8"),
+            request.full_url,
+            "application/json",
+        ),
+    )
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.service.urlopen",
+        lambda request, timeout=60: FakeResponse(_pdf_bytes(), request.full_url),
+    )
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.service.extract_pdf_artifacts",
+        lambda pdf_path: PdfArtifacts("A" * 3000, "a" * 3000, 1, "unsupported", []),
+    )
+
+    result = fetch_publication_fulltext(
+        database_path,
+        "journals/test/OpenAlex2024",
+        refresh=True,
+        include_text=True,
+        excerpt_chars=50,
+    )
+
+    assert len(result["fulltext"]["excerpt"]) == 50
+    assert len(result["fulltext"]["text"]) == 3000
+
+
+def test_fetch_publication_fulltexts_propagates_include_text(
+    database_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.providers.openalex.urlopen",
+        lambda request, timeout=60: FakeResponse(
+            json.dumps(
+                {
+                    "locations": [
+                        {
+                            "pdf_url": "https://dl.acm.org/doi/pdf/10.1000/openalex-test?download=true",
+                            "landing_page_url": "https://doi.org/10.1000/openalex-test",
+                        }
+                    ]
+                }
+            ).encode("utf-8"),
+            request.full_url,
+            "application/json",
+        ),
+    )
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.service.urlopen",
+        lambda request, timeout=60: FakeResponse(_pdf_bytes(), request.full_url),
+    )
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.service.extract_pdf_artifacts",
+        lambda pdf_path: PdfArtifacts("B" * 500, "b" * 500, 1, "unsupported", []),
+    )
+
+    result = fetch_publication_fulltexts(
+        database_path,
+        ["journals/test/OpenAlex2024"],
+        refresh=True,
+        include_text=True,
+        excerpt_chars=25,
+    )
+
+    assert result["results"][0]["fulltext"]["text_length"] == 500
+    assert len(result["results"][0]["fulltext"]["excerpt"]) == 25
+    assert len(result["results"][0]["fulltext"]["text"]) == 500
+
+
+def test_fetch_publication_fulltexts_rejects_oversized_batches(
+    database_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("dblp_mcp.fulltext.service.MAX_FULLTEXT_BATCH_SIZE", 1)
+    with pytest.raises(ValueError, match="at most 1"):
+        fetch_publication_fulltexts(database_path, ["a", "b"])

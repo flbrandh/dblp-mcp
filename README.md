@@ -120,21 +120,22 @@ Notes:
 - incremental append imports are intentionally not supported
 
 ### `search_publications`
-Search imported publications using the SQLite FTS index.
+Search imported publications using structured term groups over the SQLite FTS index.
 
 Parameters:
-- `query`: full-text query terms
+- `term_groups`: list of OR-groups; the outer list means AND between groups
 - `database_path`: SQLite file to search, constrained to `DBLP_MCP_DATA_DIR`
-- `limit`: maximum number of results, from 1 to 100
+- `limit`: maximum number of results, from 1 to 1000
 - `year_from`, `year_to`: optional year filters
 - `record_types`: optional DBLP record type filter list
 - `contributor`: optional normalized contributor substring filter
 - `venue`: optional normalized venue substring filter
 
 Returns:
-- the query
+- the normalized `term_groups`
 - result count
-- publication summaries including contributors and venues
+- compact publication summaries by default
+- optional contributor and venue lists when explicitly requested
 
 ### `get_publication`
 Fetch one publication by canonical DBLP key.
@@ -147,9 +148,8 @@ Returns:
 - bibliographic core fields
 - contributors
 - venues
-- identifiers
-- extra sparse fields
-- `abstract`, if one has already been fetched and cached
+- full `abstract`, if one has already been fetched and cached
+- optional identifiers, extra sparse fields, and fulltext metadata when explicitly requested
 
 ### `fetch_publication_abstract`
 Fetch an abstract for an imported publication and cache it in SQLite.
@@ -208,7 +208,8 @@ Returns:
 - provider and source metadata
 - local cached PDF path relative to `DBLP_MCP_DATA_DIR`
 - SHA-256, size, and page count
-- extracted full text
+- a token-efficient `excerpt` and `text_length` by default
+- optional full extracted text when explicitly requested
 - `image_status` plus `page_image_paths` (currently text-only / unsupported by default)
 
 ### `fetch_publication_fulltexts`
@@ -347,3 +348,11 @@ This repository includes:
 - `SECURITY.md`
 - `CONTRIBUTING.md`
 - GitHub Actions CI in `.github/workflows/ci.yml`
+
+
+Additional controls:
+- `DBLP_MCP_ENABLE_ABSTRACT_NETWORK=0` disables abstract providers only
+- `DBLP_MCP_ENABLE_FULLTEXT_NETWORK=0` disables fulltext providers only
+- batch tools enforce configurable limits for abstract and fulltext requests
+
+- `DBLP_MCP_PROVIDER_DELAY_MIN_SECONDS` / `DBLP_MCP_PROVIDER_DELAY_MAX_SECONDS` add a small randomized default delay before provider requests; provider-specific overrides use names like `DBLP_MCP_PROVIDER_DELAY_OPENALEX_MIN_SECONDS` and `DBLP_MCP_PROVIDER_DELAY_IEEE_PDF_MAX_SECONDS`

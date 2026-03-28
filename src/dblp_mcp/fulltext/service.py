@@ -6,13 +6,16 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from ..config import (
     FULLTEXT_TIMEOUT_SECONDS,
+    MAX_FULLTEXT_BATCH_SIZE,
     MAX_FULLTEXT_PDF_BYTES,
-    ensure_network_enabled,
+    ensure_fulltext_network_enabled,
+    provider_request_delay,
     relative_to_data_dir,
 )
 from ..database import connect, ensure_fulltext_schema
@@ -21,6 +24,31 @@ from .base import FulltextLookup
 from .extract import extract_pdf_artifacts
 from .registry import get_providers
 from .storage import ensure_storage_dir, hash_file, write_pdf_atomically
+
+
+class FulltextPayload(TypedDict, total=False):
+    provider: str
+    source_url: str
+    pdf_url: str
+    local_pdf_path: str
+    sha256: str
+    size_bytes: int
+    page_count: int
+    image_status: str
+    page_image_paths: list[str]
+    fetched_at: str
+    text_length: int
+    excerpt: str
+    text: str
+
+
+class FulltextResult(TypedDict, total=False):
+    dblp_key: str
+    refresh: bool
+    status: str
+    fulltext: FulltextPayload | None
+    error: str
+
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"
 _ALLOWED_PDF_HOSTS = {
@@ -36,11 +64,14 @@ def fetch_publication_fulltext(
     dblp_key: str,
     *,
     refresh: bool = False,
+    include_text: bool = False,
+    excerpt_chars: int = 2000,
 ) -> dict[str, object]:
     """Fetch, validate, cache, and return one publication full text.
 
     Successful results are cached on disk and summarized in SQLite. Provider
-    failures are logged and the first valid PDF candidate wins.
+    failures are logged and the first valid PDF candidate wins. Responses are
+    compact by default and return only an excerpt unless full text is requested.
     """
     connection = connect(database_path)
     try:
@@ -59,7 +90,11 @@ def fetch_publication_fulltext(
                     "dblp_key": dblp_key,
                     "refresh": refresh,
                     "status": "cached",
-                    "fulltext": cached,
+                    "fulltext": _client_fulltext_payload(
+                        cached,
+                        include_text=include_text,
+                        excerpt_chars=excerpt_chars,
+                    ),
                 }
 
         lookup = _build_lookup(connection, publication_id)
@@ -148,7 +183,11 @@ def fetch_publication_fulltext(
                     "dblp_key": dblp_key,
                     "refresh": refresh,
                     "status": "fetched",
-                    "fulltext": stored,
+                    "fulltext": _client_fulltext_payload(
+                        stored,
+                        include_text=include_text,
+                        excerpt_chars=excerpt_chars,
+                    ),
                 }
 
         connection.commit()
@@ -163,11 +202,20 @@ def fetch_publication_fulltext(
 
 
 def fetch_publication_fulltexts(
-    database_path: str | Path, dblp_keys: list[str], *, refresh: bool = False
+    database_path: str | Path,
+    dblp_keys: list[str],
+    *,
+    refresh: bool = False,
+    include_text: bool = False,
+    excerpt_chars: int = 2000,
 ) -> dict[str, object]:
     """Fetch full text for multiple publications while tolerating partial failure."""
     if not dblp_keys:
         raise ValueError("dblp_keys must not be empty")
+    if len(dblp_keys) > MAX_FULLTEXT_BATCH_SIZE:
+        raise ValueError(
+            f"dblp_keys must contain at most {MAX_FULLTEXT_BATCH_SIZE} entries"
+        )
     results = []
     summary = {
         "requested": len(dblp_keys),
@@ -181,7 +229,11 @@ def fetch_publication_fulltexts(
     for dblp_key in dblp_keys:
         try:
             result = fetch_publication_fulltext(
-                database_path, dblp_key, refresh=refresh
+                database_path,
+                dblp_key,
+                refresh=refresh,
+                include_text=include_text,
+                excerpt_chars=excerpt_chars,
             )
         except LookupError as exc:
             result = {
@@ -203,6 +255,22 @@ def fetch_publication_fulltexts(
         summary[status if status in summary else "error"] += 1
         results.append(result)
     return {"refresh": refresh, "summary": summary, "results": results}
+
+
+def _client_fulltext_payload(
+    stored: dict[str, object],
+    *,
+    include_text: bool,
+    excerpt_chars: int,
+) -> dict[str, object]:
+    """Shape cached fulltext data into a token-efficient client payload."""
+    text_value = str(stored.get("text") or "")
+    payload = {key: value for key, value in stored.items() if key != "text"}
+    payload["text_length"] = len(text_value)
+    payload["excerpt"] = text_value[:excerpt_chars] if excerpt_chars > 0 else ""
+    if include_text:
+        payload["text"] = text_value
+    return payload
 
 
 def _build_lookup(
@@ -285,7 +353,8 @@ def _download_and_store_fulltext(
     headers = {"User-Agent": USER_AGENT}
     if request_headers:
         headers.update(request_headers)
-    ensure_network_enabled()
+    ensure_fulltext_network_enabled()
+    provider_request_delay(provider)
     request = Request(pdf_url, headers=headers)
     with urlopen(request, timeout=FULLTEXT_TIMEOUT_SECONDS) as response:
         final_url = response.geturl() if hasattr(response, "geturl") else pdf_url

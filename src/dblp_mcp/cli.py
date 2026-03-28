@@ -32,7 +32,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     search_parser = subparsers.add_parser("search", help="search the SQLite database")
     search_parser.add_argument("--database-path", default=str(DEFAULT_DATABASE_PATH))
-    search_parser.add_argument("--query", required=True)
+    search_parser.add_argument(
+        "--term-group",
+        action="append",
+        dest="term_groups",
+        required=True,
+        help="Repeatable OR-group; terms inside one group are space-separated",
+    )
     search_parser.add_argument("--limit", type=int, default=10)
     search_parser.add_argument("--year-from", type=int)
     search_parser.add_argument("--year-to", type=int)
@@ -70,7 +76,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "search":
         search_result = search_publications(
             database_path=args.database_path,
-            query=args.query,
+            term_groups=[group.split() for group in args.term_groups],
             limit=args.limit,
             year_from=args.year_from,
             year_to=args.year_to,

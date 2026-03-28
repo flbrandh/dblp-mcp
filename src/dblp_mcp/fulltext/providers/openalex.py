@@ -6,7 +6,11 @@ import json
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from ...config import FULLTEXT_TIMEOUT_SECONDS, ensure_network_enabled
+from ...config import (
+    FULLTEXT_TIMEOUT_SECONDS,
+    ensure_fulltext_network_enabled,
+    provider_request_delay,
+)
 from ..base import FulltextCandidate, FulltextLookup
 
 OPENALEX_WORKS_URL = "https://api.openalex.org/works/https://doi.org/{doi}"
@@ -24,7 +28,8 @@ class OpenAlexPdfProvider:
         if lookup.doi is None:
             return []
         source_url = OPENALEX_WORKS_URL.format(doi=quote(lookup.doi, safe=""))
-        ensure_network_enabled()
+        ensure_fulltext_network_enabled()
+        provider_request_delay(self.name)
         request = Request(source_url, headers={"User-Agent": USER_AGENT})
         with urlopen(request, timeout=FULLTEXT_TIMEOUT_SECONDS) as response:
             final_url = response.geturl() if hasattr(response, "geturl") else source_url
