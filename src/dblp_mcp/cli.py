@@ -1,8 +1,11 @@
+"""Small helper CLI for local operator workflows outside MCP clients."""
+
 from __future__ import annotations
 
 import argparse
 import json
 from dataclasses import asdict
+from typing import Sequence
 
 from .config import DEFAULT_DATABASE_PATH, DEFAULT_XML_PATH
 from .downloader import download_dblp_dump
@@ -11,6 +14,7 @@ from .search import get_publication, search_publications
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Create the helper CLI argument parser."""
     parser = argparse.ArgumentParser(description="DBLP MCP helper CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -41,27 +45,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
+    """Execute the helper CLI and print structured JSON results."""
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.command == "download":
-        payload = download_dblp_dump(
+        download_result = download_dblp_dump(
             destination=args.destination,
             source_url=args.source_url,
             replace=args.replace,
         )
-        print(json.dumps(asdict(payload), indent=2, default=str))
+        print(json.dumps(asdict(download_result), indent=2, default=str))
         return
 
     if args.command == "import":
         importer = DblpImporter(args.database_path, batch_size=args.batch_size)
-        payload = importer.import_file(args.xml_path, replace=True)
-        print(json.dumps(payload, indent=2))
+        import_result = importer.import_file(args.xml_path, replace=True)
+        print(json.dumps(import_result, indent=2))
         return
 
     if args.command == "search":
-        payload = search_publications(
+        search_result = search_publications(
             database_path=args.database_path,
             query=args.query,
             limit=args.limit,
@@ -71,13 +76,15 @@ def main() -> None:
             contributor=args.contributor,
             venue=args.venue,
         )
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(search_result, indent=2))
         return
 
     if args.command == "get":
-        payload = get_publication(args.database_path, args.dblp_key)
-        print(json.dumps(payload, indent=2))
+        publication = get_publication(args.database_path, args.dblp_key)
+        print(json.dumps(publication, indent=2))
         return
+
+    raise AssertionError(f"unhandled command: {args.command}")
 
 
 if __name__ == "__main__":

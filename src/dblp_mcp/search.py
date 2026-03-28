@@ -19,6 +19,7 @@ _YEAR_TOKEN_RE = re.compile(r"^(19|20)\d{2}$")
 
 
 def _split_query_terms(query: str) -> tuple[list[str], list[int]]:
+    """Split text tokens from year-like tokens embedded in a search query."""
     text_tokens = []
     years = []
     for token in query.split():
@@ -34,6 +35,7 @@ def _split_query_terms(query: str) -> tuple[list[str], list[int]]:
 
 
 def _escape_fts_query(query: str) -> str:
+    """Escape user tokens into a conservative SQLite FTS ``AND`` query."""
     tokens = [token.strip() for token in query.split() if token.strip()]
     if not tokens:
         raise ValueError("query must not be empty")
@@ -41,6 +43,7 @@ def _escape_fts_query(query: str) -> str:
 
 
 def _record_type_rank(record_type: str) -> int:
+    """Rank paper-like records ahead of proceedings/container records."""
     if record_type in {"article", "inproceedings", "incollection", "phdthesis", "mastersthesis"}:
         return 0
     if record_type in {"informal", "data"}:
@@ -61,10 +64,18 @@ def search_publications(
     contributor: str | None = None,
     venue: str | None = None,
 ) -> dict[str, object]:
+    """Search publications by full-text query plus optional structured filters.
+
+    The query parser treats year-like tokens as year filters and ranks
+    paper-like records ahead of proceedings volumes so common venue/year
+    searches surface individual papers first.
+    """
     if limit < 1 or limit > 100:
         raise ValueError("limit must be between 1 and 100")
 
     text_tokens, query_years = _split_query_terms(query)
+    if not text_tokens and not query_years:
+        raise ValueError("query must not be empty")
     effective_year_from = year_from
     effective_year_to = year_to
     if query_years:

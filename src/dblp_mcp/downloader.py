@@ -13,14 +13,14 @@ from .config import DEFAULT_SOURCE_URL, DOWNLOAD_TIMEOUT_SECONDS, ensure_network
 
 
 def _hash_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    digest = sha256()
+    digest_state = sha256()
     with path.open("rb") as handle:
         while True:
             chunk = handle.read(chunk_size)
             if not chunk:
                 break
-            digest.update(chunk)
-    return digest.hexdigest()
+            digest_state.update(chunk)
+    return digest_state.hexdigest()
 
 
 @dataclass(slots=True)
@@ -57,18 +57,18 @@ def download_dblp_dump(
     destination_path.parent.mkdir(parents=True, exist_ok=True)
 
     if destination_path.exists() and not replace:
-        digest = _hash_file(destination_path, chunk_size=chunk_size)
+        digest_hex = _hash_file(destination_path, chunk_size=chunk_size)
         return DownloadResult(
             source_url=source_url,
             destination=destination_path,
             size_bytes=destination_path.stat().st_size,
-            sha256=digest,
+            sha256=digest_hex,
             downloaded_at=datetime.now(timezone.utc).isoformat(),
             cached=True,
         )
 
     temp_path = destination_path.with_suffix(destination_path.suffix + ".part")
-    digest = sha256()
+    digest_state = sha256()
     size_bytes = 0
 
     try:
@@ -78,7 +78,7 @@ def download_dblp_dump(
                 if not chunk:
                     break
                 handle.write(chunk)
-                digest.update(chunk)
+                digest_state.update(chunk)
                 size_bytes += len(chunk)
     except HTTPError as exc:
         temp_path.unlink(missing_ok=True)
@@ -95,7 +95,7 @@ def download_dblp_dump(
         source_url=source_url,
         destination=destination_path,
         size_bytes=size_bytes,
-        sha256=digest.hexdigest(),
+        sha256=digest_state.hexdigest(),
         downloaded_at=datetime.now(timezone.utc).isoformat(),
         cached=False,
     )

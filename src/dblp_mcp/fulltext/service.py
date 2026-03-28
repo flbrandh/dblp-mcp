@@ -1,3 +1,5 @@
+"""Orchestration helpers for lawful full-text fetching and caching."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -30,6 +32,11 @@ def fetch_publication_fulltext(
     *,
     refresh: bool = False,
 ) -> dict[str, object]:
+    """Fetch, validate, cache, and return one publication full text.
+
+    Successful results are cached on disk and summarized in SQLite. Provider
+    failures are logged and the first valid PDF candidate wins.
+    """
     connection = connect(database_path)
     try:
         ensure_fulltext_schema(connection)
@@ -51,7 +58,11 @@ def fetch_publication_fulltext(
             return {"dblp_key": dblp_key, "refresh": refresh, "status": "unsupported", "fulltext": None}
 
         for provider in providers:
-            candidates = provider.fetch_candidates(lookup)
+            try:
+                candidates = provider.fetch_candidates(lookup)
+            except Exception as exc:
+                _log_fetch_attempt(connection, publication_id, dblp_key, provider.name, None, "error", exc.__class__.__name__, str(exc))
+                continue
             if not candidates:
                 _log_fetch_attempt(connection, publication_id, dblp_key, provider.name, None, "not_found", "not_found", "provider did not return a legal pdf candidate")
                 continue
@@ -72,6 +83,7 @@ def fetch_publication_fulltext(
 
 
 def fetch_publication_fulltexts(database_path: str | Path, dblp_keys: list[str], *, refresh: bool = False) -> dict[str, object]:
+    """Fetch full text for multiple publications while tolerating partial failure."""
     if not dblp_keys:
         raise ValueError("dblp_keys must not be empty")
     results = []
@@ -90,6 +102,7 @@ def fetch_publication_fulltexts(database_path: str | Path, dblp_keys: list[str],
 
 
 def _build_lookup(connection: sqlite3.Connection, publication_id: int) -> FulltextLookup:
+    """Derive provider lookup identifiers from stored DBLP metadata."""
     identifiers = [dict(row) for row in connection.execute("SELECT kind, value FROM publication_identifiers WHERE publication_id = ? ORDER BY kind, value", (publication_id,)).fetchall()]
     extra_fields = [dict(row) for row in connection.execute("SELECT field_name, field_value FROM publication_fields WHERE publication_id = ? ORDER BY field_name, position", (publication_id,)).fetchall()]
     doi = None
@@ -106,6 +119,7 @@ def _build_lookup(connection: sqlite3.Connection, publication_id: int) -> Fullte
 
 
 def _extract_doi(value: str) -> str | None:
+    """Extract a DOI from DBLP identifier text or DOI URL forms."""
     normalized = normalize_text(value)
     if not normalized:
         return None
@@ -119,6 +133,7 @@ def _extract_doi(value: str) -> str | None:
 
 
 def _extract_arxiv_id(value: str) -> str | None:
+    """Extract an arXiv identifier from common URL and DOI forms."""
     normalized = normalize_text(value)
     if not normalized:
         return None
@@ -136,6 +151,7 @@ def _extract_arxiv_id(value: str) -> str | None:
 
 
 def _download_and_store_fulltext(connection: sqlite3.Connection, publication_id: int, dblp_key: str, provider: str, source_url: str, pdf_url: str, request_headers: dict[str, str] | None = None) -> dict[str, object]:
+    """Download one PDF candidate, validate it, and persist its cached artifacts."""
     parsed = urlparse(pdf_url)
     if parsed.scheme != 'https' or parsed.netloc not in _ALLOWED_PDF_HOSTS:
         raise ValueError('pdf candidate host is not allowlisted')
@@ -189,6 +205,7 @@ def _download_and_store_fulltext(connection: sqlite3.Connection, publication_id:
 
 
 def _get_cached_fulltext(connection: sqlite3.Connection, publication_id: int) -> dict[str, object] | None:
+    """Load one cached full-text payload and sanitize its file paths for clients."""
     row = connection.execute("SELECT provider, source_url, pdf_url, local_pdf_path, sha256, size_bytes, page_count, full_text, image_status, page_image_paths_json, fetched_at FROM publication_fulltexts WHERE publication_id = ?", (publication_id,)).fetchone()
     if row is None:
         return None

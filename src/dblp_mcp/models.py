@@ -1,7 +1,9 @@
+"""Typed data structures shared by the DBLP XML importer."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 
 DBLP_RECORD_TYPES = {
@@ -15,7 +17,6 @@ DBLP_RECORD_TYPES = {
     "www",
     "data",
 }
-
 VENUE_FIELDS = ("journal", "booktitle", "series", "publisher", "school")
 IDENTIFIER_FIELDS = ("doi", "isbn", "issn", "url", "ee")
 SCALAR_FIELDS = (
@@ -30,10 +31,13 @@ SCALAR_FIELDS = (
     "address",
     "note",
 )
+EXTRA_FIELD: TypeAlias = tuple[str, str, int]
 
 
 @dataclass(slots=True)
 class Contributor:
+    """One ordered contributor reference from a DBLP record."""
+
     name: str
     role: str
     position: int
@@ -41,6 +45,8 @@ class Contributor:
 
 @dataclass(slots=True)
 class VenueLink:
+    """One ordered venue-like field associated with a publication."""
+
     name: str
     venue_type: str
     position: int = 0
@@ -48,12 +54,16 @@ class VenueLink:
 
 @dataclass(slots=True)
 class Identifier:
+    """One stable identifier associated with a publication."""
+
     kind: str
     value: str
 
 
 @dataclass(slots=True)
 class PublicationRecord:
+    """Normalized in-memory representation of one DBLP XML record."""
+
     dblp_key: str
     record_type: str
     title: str = ""
@@ -69,6 +79,6 @@ class PublicationRecord:
     contributors: list[Contributor] = field(default_factory=list)
     venues: list[VenueLink] = field(default_factory=list)
     identifiers: list[Identifier] = field(default_factory=list)
-    extra_fields: list[tuple[str, str, int]] = field(default_factory=list)
+    extra_fields: list[EXTRA_FIELD] = field(default_factory=list)
     source_mdate: str | None = None
     raw_attributes: dict[str, Any] = field(default_factory=dict)

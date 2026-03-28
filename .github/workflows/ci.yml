@@ -18,5 +18,7 @@ jobs:
           pip install -e .[dev]
       - name: Run tests
         run: python -m pytest
+      - name: Run mypy
+        run: mypy src
       - name: Compile sources
         run: python -m compileall src tests app.py

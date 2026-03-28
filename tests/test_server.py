@@ -12,6 +12,10 @@ def _tool_names(mcp) -> set[str]:
     return set(mcp._tool_manager._tools.keys())
 
 
+def _tool_fn(mcp, name: str):
+    return mcp._tool_manager._tools[name].fn
+
+
 def test_unprivileged_server_hides_download_and_build_tools() -> None:
     tool_names = _tool_names(create_mcp(privileged=False))
 
@@ -39,3 +43,21 @@ def test_resolve_data_path_places_relative_paths_under_data_dir() -> None:
     resolved = resolve_data_path('nested/test.sqlite')
 
     assert resolved == DEFAULT_DATA_DIR / 'nested' / 'test.sqlite'
+
+
+def test_unprivileged_search_tool_rejects_paths_outside_data_dir() -> None:
+    mcp = create_mcp(privileged=False)
+    with pytest.raises(ValueError, match="DBLP_MCP_DATA_DIR"):
+        _tool_fn(mcp, "search_publications")(query="test", database_path="../outside.sqlite")
+
+
+def test_privileged_download_tool_rejects_paths_outside_data_dir() -> None:
+    mcp = create_mcp(privileged=True)
+    with pytest.raises(ValueError, match="DBLP_MCP_DATA_DIR"):
+        _tool_fn(mcp, "download_dblp_dump")(destination="../dblp.xml.gz")
+
+
+def test_privileged_build_tool_rejects_paths_outside_data_dir() -> None:
+    mcp = create_mcp(privileged=True)
+    with pytest.raises(ValueError, match="DBLP_MCP_DATA_DIR"):
+        _tool_fn(mcp, "build_dblp_sqlite")(xml_path="../dblp.xml", database_path="safe.sqlite")

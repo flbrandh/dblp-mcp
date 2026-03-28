@@ -1,3 +1,5 @@
+"""Runtime configuration and path-sandbox helpers for the DBLP MCP server."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,15 +21,22 @@ MAX_FULLTEXT_PDF_BYTES = int(os.getenv("DBLP_MCP_MAX_FULLTEXT_PDF_BYTES", str(25
 
 
 def data_dir_was_explicitly_configured() -> bool:
+    """Return whether `DBLP_MCP_DATA_DIR` was set in the environment."""
     return _DBLP_MCP_DATA_DIR is not None
 
 
 def ensure_network_enabled() -> None:
+    """Fail fast when network-backed enrichment has been disabled by config."""
     if not NETWORK_ENABLED:
         raise RuntimeError("network-backed enrichment is disabled by DBLP_MCP_ENABLE_NETWORK")
 
 
 def resolve_data_path(path: str | os.PathLike[str]) -> Path:
+    """Resolve a path and ensure it stays within ``DBLP_MCP_DATA_DIR``.
+
+    Relative paths are interpreted under the configured data directory. Absolute
+    paths are allowed only when they remain inside the same directory tree.
+    """
     candidate = Path(path).expanduser()
     if not candidate.is_absolute():
         candidate = DEFAULT_DATA_DIR / candidate
@@ -41,5 +50,6 @@ def resolve_data_path(path: str | os.PathLike[str]) -> Path:
 
 
 def relative_to_data_dir(path: str | os.PathLike[str]) -> str:
+    """Return a path relative to ``DBLP_MCP_DATA_DIR`` for safe client output."""
     resolved = resolve_data_path(path)
     return str(resolved.relative_to(DEFAULT_DATA_DIR))

@@ -263,3 +263,30 @@ def test_fetch_publication_abstracts_returns_mixed_results(
 def test_fetch_publication_abstracts_rejects_empty_lists(database_path: Path) -> None:
     with pytest.raises(ValueError, match="dblp_keys must not be empty"):
         fetch_publication_abstracts(database_path, [])
+
+
+def test_fetch_publication_abstract_handles_network_disabled(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "dblp_mcp.abstracts.providers.openalex.ensure_network_enabled",
+        lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
+    )
+    monkeypatch.setattr(
+        "dblp_mcp.abstracts.providers.openalex.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("urlopen should not be called")),
+    )
+
+    result = fetch_publication_abstract(database_path, "journals/test/OpenAlex2024")
+
+    assert result["status"] == "not_found"
+
+
+def test_fetch_publication_abstracts_classifies_provider_errors(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "dblp_mcp.abstracts.providers.openalex.ensure_network_enabled",
+        lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
+    )
+
+    result = fetch_publication_abstracts(database_path, ["journals/test/OpenAlex2024"])
+
+    assert result["summary"]["not_found"] == 1
+    assert result["results"][0]["status"] == "not_found"

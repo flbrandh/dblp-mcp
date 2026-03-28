@@ -252,3 +252,68 @@ def test_search_publications_infers_year_and_prioritizes_papers(tmp_path: Path) 
     assert result["count"] >= 2
     assert result["results"][0]["dblp_key"] == "conf/sigcomm/Paper2024"
     assert any(item["dblp_key"] == "conf/sigcomm/2024" for item in result["results"])
+
+
+def test_search_publications_rejects_blank_query(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    with pytest.raises(ValueError, match="query must not be empty"):
+        search_publications(database_path, "   ")
+
+
+def test_search_publications_rejects_invalid_limits(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    with pytest.raises(ValueError, match="limit must be between 1 and 100"):
+        search_publications(database_path, "streaming", limit=0)
+    with pytest.raises(ValueError, match="limit must be between 1 and 100"):
+        search_publications(database_path, "streaming", limit=101)
+
+
+def test_search_publications_supports_year_only_queries(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    result = search_publications(database_path, "2024", limit=10)
+
+    assert result["count"] == 1
+    assert result["results"][0]["dblp_key"] == "journals/test/Example2024"
+
+
+def test_search_publications_combines_structured_filters(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    result = search_publications(
+        database_path,
+        "offline index",
+        contributor="carol",
+        venue="example conference",
+        record_types=["inproceedings"],
+    )
+
+    assert result["count"] == 1
+    assert result["results"][0]["dblp_key"] == "conf/test/Builder2023"
+
+
+def test_download_respects_disabled_network_setting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    destination = DEFAULT_DATA_DIR / 'test-download-disabled' / 'dblp.xml.gz'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr('dblp_mcp.downloader.ensure_network_enabled', lambda: (_ for _ in ()).throw(RuntimeError('network disabled')))
+
+    with pytest.raises(RuntimeError, match='network disabled'):
+        download_dblp_dump(destination=destination, replace=True)

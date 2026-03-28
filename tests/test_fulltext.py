@@ -226,3 +226,41 @@ def test_fetch_publication_fulltext_respects_pdf_size_limit(database_path: Path,
     result = fetch_publication_fulltext(database_path, 'journals/test/OpenAlex2024', refresh=True)
 
     assert result['status'] == 'not_found'
+
+
+def test_fetch_publication_fulltext_handles_network_disabled(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.providers.openalex.ensure_network_enabled",
+        lambda: (_ for _ in ()).throw(RuntimeError("network disabled")),
+    )
+    monkeypatch.setattr(
+        "dblp_mcp.fulltext.service.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("urlopen should not be called")),
+    )
+
+    result = fetch_publication_fulltext(database_path, "journals/test/OpenAlex2024", refresh=True)
+
+    assert result["status"] == "not_found"
+
+
+def test_fetch_publication_fulltext_rejects_html_payloads(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        'dblp_mcp.fulltext.providers.openalex.urlopen',
+        lambda request, timeout=60: FakeResponse(
+            json.dumps({
+                'locations': [
+                    {'pdf_url': 'https://dl.acm.org/doi/pdf/10.1000/openalex-test?download=true', 'landing_page_url': 'https://doi.org/10.1000/openalex-test'}
+                ]
+            }).encode('utf-8'),
+            request.full_url,
+            'application/json',
+        ),
+    )
+    monkeypatch.setattr(
+        'dblp_mcp.fulltext.service.urlopen',
+        lambda request, timeout=60: FakeResponse(b'<!DOCTYPE html><html></html>', request.full_url, 'text/html'),
+    )
+
+    result = fetch_publication_fulltext(database_path, 'journals/test/OpenAlex2024', refresh=True)
+
+    assert result['status'] == 'not_found'

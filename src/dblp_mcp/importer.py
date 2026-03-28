@@ -1,3 +1,5 @@
+"""Streaming DBLP XML importer that builds the local SQLite search database."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,8 +9,8 @@ from pathlib import Path
 from re import compile as re_compile
 import os
 import sqlite3
-from typing import BinaryIO, Iterable
-from xml.etree.ElementTree import XMLParser
+from typing import BinaryIO, Iterable, cast
+from xml.etree.ElementTree import Element, XMLParser
 
 from defusedxml.ElementTree import iterparse
 
@@ -32,12 +34,14 @@ _ENTITY_RE = re_compile(r'<!ENTITY\s+(\w+)\s+"([^"]*)"\s*>')
 
 
 def _open_xml_stream(xml_path: Path) -> BinaryIO:
+    """Open plain or gzip-compressed DBLP XML streams in binary mode."""
     if xml_path.suffix == ".gz":
-        return gzip_open(xml_path, "rb")
+        return cast(BinaryIO, gzip_open(xml_path, "rb"))
     return xml_path.open("rb")
 
 
 def _load_entity_map(xml_path: Path) -> dict[str, str]:
+    """Load DBLP DTD entities so real-world DBLP XML can be parsed safely."""
     dtd_path = xml_path.with_name("dblp.dtd")
     if not dtd_path.exists():
         download_dblp_dump(destination=dtd_path, source_url=DBLP_DTD_URL, replace=False)
@@ -50,19 +54,22 @@ def _load_entity_map(xml_path: Path) -> dict[str, str]:
 
 
 def _build_xml_parser(xml_path: Path) -> XMLParser:
+    """Construct an XML parser with DBLP entity declarations preloaded."""
     parser = XMLParser()
     parser.entity.update(_load_entity_map(xml_path))
     return parser
 
 
 def _safe_int(value: str) -> int | None:
+    """Parse an integer value and return ``None`` for malformed input."""
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
 
 
-def _build_record(element) -> PublicationRecord:
+def _build_record(element: Element) -> PublicationRecord:
+    """Convert one DBLP record element into a normalized in-memory dataclass."""
     record = PublicationRecord(
         dblp_key=element.attrib["key"],
         record_type=element.tag,
@@ -116,7 +123,8 @@ def _build_record(element) -> PublicationRecord:
     return record
 
 
-class ImportStats(dict):
+class ImportStats(dict[str, int]):
+    """Small typed counter map tracking importer output sizes."""
     @classmethod
     def create(cls) -> "ImportStats":
         return cls(
@@ -132,6 +140,7 @@ class ImportStats(dict):
 
 class DblpImporter:
     def __init__(self, database_path: str | os.PathLike[str], batch_size: int = 500) -> None:
+        """Create a streaming importer targeting one SQLite file."""
         if batch_size < 1:
             raise ValueError("batch_size must be at least 1")
         self.database_path = Path(database_path)
@@ -143,6 +152,7 @@ class DblpImporter:
         *,
         replace: bool = True,
     ) -> dict[str, object]:
+        """Stream one DBLP XML/XML.GZ file into SQLite and rebuild the FTS index."""
         source_path = Path(xml_path)
         if not source_path.exists():
             raise FileNotFoundError(f"XML source not found: {source_path}")
@@ -218,6 +228,7 @@ class DblpImporter:
         }
 
     def _start_import_run(self, connection: sqlite3.Connection, source_path: Path) -> int:
+        """Create an ``import_runs`` row marking the start of an import."""
         cursor = connection.execute(
             """
             INSERT INTO import_runs(source_path, started_at, status, source_size_bytes)
@@ -229,7 +240,10 @@ class DblpImporter:
                 source_path.stat().st_size,
             ),
         )
-        return int(cursor.lastrowid)
+        lastrowid = cursor.lastrowid
+        if lastrowid is None:
+            raise RuntimeError("failed to create import_runs row")
+        return int(lastrowid)
 
     def _finish_import_run(
         self,
@@ -239,6 +253,7 @@ class DblpImporter:
         records_processed: int,
         error_message: str | None = None,
     ) -> None:
+        """Update an ``import_runs`` row with completion status and optional error text."""
         connection.execute(
             """
             UPDATE import_runs
@@ -262,6 +277,7 @@ class DblpImporter:
         venue_cache: dict[tuple[str, str], int],
         stats: ImportStats,
     ) -> None:
+        """Persist one normalized publication plus related rows."""
         cursor = connection.execute(
             """
             INSERT INTO publications(
@@ -299,7 +315,10 @@ class DblpImporter:
                 record.source_mdate,
             ),
         )
-        publication_id = int(cursor.lastrowid)
+        lastrowid = cursor.lastrowid
+        if lastrowid is None:
+            raise RuntimeError("failed to insert publication row")
+        publication_id = int(lastrowid)
         stats["publications"] += 1
 
         for contributor in record.contributors:

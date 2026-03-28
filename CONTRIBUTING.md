@@ -12,6 +12,7 @@ pip install -e .[dev]
 
 ```bash
 python -m pytest
+mypy src
 python -m compileall src tests app.py
 ```
 
