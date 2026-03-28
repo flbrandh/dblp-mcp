@@ -438,3 +438,57 @@ def test_search_publications_year_groups_preserve_and_or_semantics(
         "journals/test/Y2025",
     }
     assert and_result["count"] == 0
+
+
+def test_search_publications_rejects_sql_injection_like_terms(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    suspicious_groups = [
+        [["' OR 1=1 --"]],
+        [['") OR 1=1 --']],
+        [['streaming" OR "x"']],
+    ]
+
+    for term_groups in suspicious_groups:
+        result = search_publications(database_path, term_groups, limit=10)
+        assert result["count"] == 0
+
+    status = get_database_status(database_path)
+    assert status["publications"] == 2
+
+
+def test_get_publication_treats_sql_injection_like_key_as_literal(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    publication = get_publication(database_path, "journals/test/Example2024' OR '1'='1")
+
+    assert publication is None
+    status = get_database_status(database_path)
+    assert status["publications"] == 2
+
+
+def test_search_publications_treats_filter_inputs_as_literals(tmp_path: Path) -> None:
+    xml_path = tmp_path / "dblp.xml"
+    database_path = tmp_path / "dblp.sqlite"
+    xml_path.write_text(SAMPLE_XML, encoding="utf-8")
+    _write_local_dtd(tmp_path)
+    DblpImporter(database_path).import_file(xml_path)
+
+    result = search_publications(
+        database_path,
+        [["streaming"]],
+        contributor="Alice Example%' OR '1'='1",
+        venue="Journal%' OR '1'='1",
+    )
+
+    assert result["count"] == 0
+    status = get_database_status(database_path)
+    assert status["publications"] == 2
